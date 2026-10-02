@@ -30,6 +30,9 @@ Auto-replies to your personal WhatsApp 1-to-1 chats in your own writing style.
    postgresql://user:pass@host:26257/evogo_auth?sslmode=verify-full&options=-c%20autocommit_before_ddl%3Dfalse
    ```
 
+   The `Dockerfile` also patches one line of Evolution Go (a gorm tag on `runtime_configs.key`): unpatched, it
+   crashes on every start after the first with `constraint "uni_runtime_configs_key" ... does not exist`.
+
    If CockroachDB still causes problems, switch to **Neon** (real Postgres). Paste Neon's two URLs instead and drop the `options=…` part. Nothing else changes.
 
 The bot's own tables (`bot_settings`, `bot_replies`) go into `evogo_users` unless you set `DATABASE_URL`.

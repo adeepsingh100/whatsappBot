@@ -4,6 +4,10 @@ RUN apk add --no-cache git build-base libjpeg-turbo-dev libwebp-dev
 ARG EVO_REF=0.7.2
 RUN git clone --depth 1 --branch ${EVO_REF} https://github.com/evolution-foundation/evolution-go /src
 WORKDIR /src
+# CockroachDB fix: with `uniqueIndex`, gorm drops a non-existent "uni_runtime_configs_key" constraint on every start
+# after the first (fatal). `unique` keeps the same guarantee and restarts cleanly. Build fails if upstream changes.
+RUN grep -q 'gorm:"uniqueIndex;size:100;not null" json:"key"' pkg/core/c0.go \
+ && sed -i 's/gorm:"uniqueIndex;size:100;not null" json:"key"/gorm:"unique;size:100;not null" json:"key"/' pkg/core/c0.go
 RUN go mod download && CGO_ENABLED=1 go build -ldflags "-X main.version=${EVO_REF}" -o /out/server ./cmd/evolution-go
 
 # Stage 2: Python bot + Evolution Go in one container (Render free = one service)

@@ -3,6 +3,7 @@ services:
     name: whatsapp-twin
     runtime: docker
     plan: free
+    region: singapore
     healthCheckPath: /health
     envVars:
       - key: GLOBAL_API_KEY
