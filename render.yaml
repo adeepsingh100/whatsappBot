@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: whatsapp-twin
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: GLOBAL_API_KEY
+        generateValue: true
+      - key: INSTANCE_TOKEN
+        generateValue: true
+      - key: POSTGRES_AUTH_DB
+        sync: false
+      - key: POSTGRES_USERS_DB
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: MY_NUMBER
+        sync: false
+      - key: EVOLUTION_OPERATOR_EMAIL
+        sync: false
+      - key: SAFE_MODE
+        value: "true"
