@@ -75,7 +75,7 @@ def test_skips(monkeypatch, tmp_path):
     run(evt("hi", ts=now_ts(), mid="off1"))                                    # switch off
     main.db.set("switch", "on")
     run(evt("hi", ts=now_ts() - 3600, mid="old"),                               # overnight backlog
-        evt("hi", chat="1-2@g.us", group=True, ts=now_ts(), mid="grp"),
+        evt("hi", chat="status@broadcast", ts=now_ts(), mid="status"),
         evt(None, ts=now_ts(), mid="media"))
     assert sent == []
 
@@ -148,18 +148,20 @@ def gmsg(text, mid, sender=RAHUL, mentions=(), quoted="", from_me=False):
     return p
 
 
-def test_groups_reply_only_when_addressed(monkeypatch, tmp_path):
+def test_groups_reply_unless_aimed_at_others(monkeypatch, tmp_path):
     sent, prompts = setup(monkeypatch, tmp_path)
     main.db.set("switch", "on")
     main.S.me = {"919811111111", "55259384799419"}
-    run(gmsg("party kab hai sab log", "g1"))
-    assert sent == []                                                          # not talking to me
+    run(gmsg("@919822222222 tu aa raha?", "g1", mentions=["919822222222@s.whatsapp.net"]))
+    assert sent == []                                                          # aimed at someone else
     run(gmsg("@55259384799419 tu aa raha?", "g2", mentions=["55259384799419@lid"]))
-    assert sent == [(GROUP, "haan bhai")]                                      # @mentioned (by LID)
+    assert sent == [(GROUP, "haan bhai")]                                      # @mentioned me (by LID)
     assert prompts[-1][-1]["content"].endswith("Rahul: tu aa raha?")         # who said it, mention stripped
     assert "GROUP chat" in prompts[-1][0]["content"]
     run(gmsg("sahi baat", "g3", quoted="919811111111@s.whatsapp.net"))
     assert len(sent) == 2                                                      # replied to my message
+    run(gmsg("party kab hai sab log", "g4"))
+    assert len(sent) == 3                                                      # plain group message: replies
 
 
 def test_learns_my_ids_from_my_messages(monkeypatch, tmp_path):

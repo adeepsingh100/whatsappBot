@@ -108,9 +108,10 @@ def is_group_chat(m: Incoming) -> bool:
     return m.chat.endswith("@g.us")
 
 
-def addressed_to_me(m: Incoming, me: set[str]) -> bool:
-    """Group message that @mentions me or replies to one of my messages."""
-    return any(user(j) in me for j in (*m.mentions, m.quoted) if j)
+def aimed_at_someone_else(m: Incoming, me: set[str]) -> bool:
+    """Group message that @mentions / swipe-replies to other people but not me."""
+    targets = {user(j) for j in (*m.mentions, m.quoted) if j}
+    return bool(targets) and not targets & me
 
 
 def strip_mentions(text: str) -> str:

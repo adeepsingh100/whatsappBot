@@ -226,8 +226,8 @@ def build_messages(style: dict, contact: str | None, history: list[tuple[bool, s
         parts.append(f"They sent {n_new} messages in a row. Answer each one that needs an answer, "
                      "one short line each, in order. Skip ones that need no answer.")
     if group:
-        parts.append("This is a GROUP chat: their lines start with 'Name: '. Someone just talked to me directly. "
-                     "Reply to that one person in one short line; don't address the whole group.")
+        parts.append("This is a GROUP chat: their lines start with 'Name: '. Reply like I'd chip in to the group, "
+                     "in one short line; reply to the latest message(s).")
     parts.append(f"You are chatting with {contact or 'a contact'}. Reply with only my next message text. "
                  "If I'd send several short messages, put each on its own line.")
     msgs = [{"role": "system", "content": "\n\n".join(parts)}]

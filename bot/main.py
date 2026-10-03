@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from bot import llm
 from bot.db import DB
-from bot.rules import (BATCH_WAIT, BOT_SUSPECT, QUIET_FOR, addressed_to_me, is_echo, is_group_chat, strip_mentions, user, with_context, clean_reply, command, human_delay, is_direct_chat, is_ignored,
+from bot.rules import (BATCH_WAIT, BOT_SUSPECT, QUIET_FOR, aimed_at_someone_else, is_echo, is_group_chat, strip_mentions, user, with_context, clean_reply, command, human_delay, is_direct_chat, is_ignored,
                        is_self_chat, phone_key,
                        is_sensitive, parse_message, too_old)
 from bot.style import build_messages, enforce_style
@@ -254,7 +254,7 @@ async def handle(payload: dict) -> None:
         return
     if not m.text or too_old(m, now) or S.quiet.get(m.chat, 0) > now:
         return
-    if group and not addressed_to_me(m, S.me):  # in groups, only answer when someone talks to me
+    if group and aimed_at_someone_else(m, S.me):  # groups: answer everything except talk aimed at others
         return
     if not await asyncio.to_thread(db.is_on) or is_ignored(m, await asyncio.to_thread(ignored_numbers)):
         return
