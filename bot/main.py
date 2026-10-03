@@ -16,10 +16,10 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from bot import llm
 from bot.db import DB
-from bot.rules import (BATCH_WAIT, QUIET_FOR, clean_reply, command, human_delay, is_direct_chat, is_ignored,
+from bot.rules import (BATCH_WAIT, BOT_SUSPECT, QUIET_FOR, SUSPECT_QUIET, clean_reply, command, human_delay, is_direct_chat, is_ignored,
                        is_self_chat, phone_key,
                        is_sensitive, parse_message, too_old)
-from bot.style import build_messages
+from bot.style import build_messages, enforce_style
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("bot")
@@ -151,9 +151,14 @@ async def reply_task(chat: str) -> None:
         if not batch:
             return
         texts = [m.text for m in batch]
+        if any(BOT_SUSPECT.search(t) for t in texts):
+            S.quiet[chat] = time.time() + SUSPECT_QUIET
+            S.pending.pop(chat, None)
+            log.warning("%s suspects a bot: staying quiet in that chat for 12h", chat)
+            return
         msgs = build_messages(S.style, S.names.get(chat), list(S.history[chat]), SAFE_MODE,
                               SAFE_MODE and is_sensitive(texts))
-        out = clean_reply(await llm.complete(msgs))
+        out = enforce_style(clean_reply(await llm.complete(msgs)), S.style.get("profile", {}))
         if not out:
             log.warning("Empty/unsafe LLM reply for %s, skipping", chat)
             S.pending.pop(chat, None)

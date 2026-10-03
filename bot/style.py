@@ -33,6 +33,23 @@ def _share(items, pred) -> float:
     return round(sum(map(pred, items)) / len(items), 3) if items else 0.0
 
 
+# standard spelling -> my usual variants; enforce_style swaps in mine when I clearly prefer it
+SPELLING_VARIANTS = {"hoon": ["hu", "hun"], "main": ["mai"], "nahi": ["nhi", "ni"], "kiya": ["kia"],
+                     "batao": ["btao"], "bas": ["bs"], "raha": ["rha", "ra"], "rahi": ["rhi", "ri"],
+                     "rahe": ["rhe", "re"], "karo": ["kro"], "karna": ["krna"], "theek": ["thik", "thk"],
+                     "accha": ["acha", "achha"], "kyun": ["kyu"], "mujhe": ["merko", "mereko", "mjhe"],
+                     "phir": ["fir"], "toh": ["to"], "kuch": ["kch"], "abhi": ["abi"]}
+
+
+def spellings(counts: Counter) -> dict:
+    out = {}
+    for std, variants in SPELLING_VARIANTS.items():
+        mine = max(variants, key=lambda v: counts[v])
+        if mine != std and counts[mine] >= 3 * max(counts[std], 1):
+            out[std] = mine
+    return out
+
+
 def profile(texts: list[str], n_samples: int = 40) -> dict:
     texts = [t for t in texts if t.strip()]
     if not texts:
@@ -71,6 +88,7 @@ def profile(texts: list[str], n_samples: int = 40) -> dict:
         "top_openers": [w for w, _ in Counter(w[0] for w in words if w).most_common(15)],
         "top_words": [w for w, _ in Counter(x for w in words for x in w).most_common(40)],
         "samples": random.Random(42).sample(uniq, min(n_samples, len(uniq))),
+        "spellings": spellings(Counter(x for w in words for x in w)),
     }
 
 
@@ -100,16 +118,39 @@ def build_style(chats: list[Chat]) -> dict:
     return {"profile": profile(mine), "pairs": pairs}
 
 
-def similar_pairs(pairs: list[dict], query: str, contact: str | None, k: int = 6,
+def same_contact(a: str | None, b: str | None) -> bool:
+    """Push name vs export name, by first word: 'Savi' ~ 'Savi❤️', 'Utkarsh' ~ 'Utkarsh BA Bebo'."""
+    wa, wb = TOKEN.findall((a or "").lower()), TOKEN.findall((b or "").lower())
+    if not (wa and wb):
+        return False
+    x, y = sorted((wa[0], wb[0]), key=len)
+    return len(x) >= 3 and y.startswith(x)  # 'savi' ~ 'savita'
+
+
+def similar_pairs(pairs: list[dict], query: str, contact: str | None, k: int = 8,
                   contact_boost: float = 0.15) -> list[dict]:
     # ponytail: re-tokenizes every pair per call, O(pairs); cache tokens if style.json grows past ~50k pairs
     q = tokens(query)
+    contacts = {c: same_contact(c, contact) for c in {p["contact"] for p in pairs}} if contact else {}
 
     def score(p):
         t = tokens(p["them"])
-        return len(q & t) / (len(q | t) or 1) + (contact_boost if contact and p["contact"] == contact else 0)
+        return len(q & t) / (len(q | t) or 1) + (contact_boost if contacts.get(p["contact"]) else 0)
 
     return sorted(pairs, key=score, reverse=True)[:k]
+
+
+PRONOUNS = {"aap": {"aap", "ap", "apko", "apke", "apka", "apki", "apne", "aapko", "aapke", "aapka"},
+            "tu": {"tu", "tujhe", "tera", "teri", "tere", "tujhko"},
+            "tum": {"tum", "tumhe", "tumhara", "tumhari", "tumko"}}
+
+
+def pronoun(texts: list[str]) -> str | None:
+    """Which 'you' I use with someone, from my messages to them."""
+    words = Counter(w for t in texts for w in TOKEN.findall(t.lower()))
+    counts = {k: sum(words[w] for w in v) for k, v in PRONOUNS.items()}
+    best = max(counts, key=counts.get)
+    return best if counts[best] >= 3 else None
 
 
 def describe(p: dict) -> str:
@@ -121,7 +162,8 @@ def describe(p: dict) -> str:
         f"- Average message: {p['avg_words']} words / {p['avg_chars']} chars; "
         f"{round(p['very_short_share'] * 100)}% of my messages are 3 words or less.",
         f"- Language mix: {langs}.",
-        f"- Emojis in {round(p['emoji_message_share'] * 100)}% of messages; favourites: {' '.join(p['top_emojis'][:6]) or 'none'}.",
+        f"- Emojis in only {round(p['emoji_message_share'] * 100)}% of messages, and only these: "
+        f"{' '.join(p['top_emojis'][:6]) or 'none'}.",
         f"- Fully lowercase {round(p['all_lowercase_share'] * 100)}% of the time.",
         f"- Message endings: {ends}.",
         f"- Words I often start with: {', '.join(p['top_openers'][:10])}.",
@@ -129,20 +171,44 @@ def describe(p: dict) -> str:
     ])
 
 
+HUMAN_RULES = """Sound like me texting from my phone, not like an assistant:
+- Copy my spellings and short forms from the examples exactly (don't "correct" them into proper Hindi or English).
+- No "!" and no emoji unless my examples would have one. Never 😊 ☀️ 👋 style filler.
+- No assistant phrases ("Bilkul", "Sure", "Of course", "How can I help", "Let me know"), no over-friendly questions.
+- Often just answer in 1-5 words. Don't always ask a question back.
+- Usually ONE short line (under 10 words). Never paragraphs, never markdown, never "..." trailing off.
+- Never describe photos, actions or feelings in [brackets] or *asterisks*. You can't send photos or make calls.
+- Never promise to call, meet, send something or do something later.
+- If asked to do work (code, essays, homework, quiz/trivia, recommendations lists), don't do it; react like a
+  busy friend would (e.g. "khud kr le 😂", "baad mai").
+- Never discuss whether you are a bot/AI. Never admit it, never argue about it.
+- Never invent facts about my life, people, places, plans or feelings. If you don't know, reply vaguely or casually ask back."""
+
+
 def build_messages(style: dict, contact: str | None, history: list[tuple[bool, str]],
                    safe_mode: bool = True, sensitive: bool = False, n_samples: int = 15) -> list[dict]:
     """OpenAI-style chat messages. history = [(from_me, text), ...] oldest first, last ~10."""
     prof = style.get("profile", {})
+    pairs = style.get("pairs", [])
     incoming = "\n".join(t for mine, t in history[-3:] if not mine)
-    shots = similar_pairs(style.get("pairs", []), incoming, contact)
+    shots = similar_pairs(pairs, incoming, contact)
+    theirs = [p["me"] for p in pairs if contact and same_contact(p["contact"], contact)]
     parts = [SYSTEM_PROMPT]
+    if style.get("about"):
+        parts.append("Facts about me (the ONLY facts you may use):\n" + style["about"].strip())
     if d := describe(prof):
         parts.append("My style:\n" + d)
-    if prof.get("samples"):
-        parts.append("Some of my real messages:\n" + "\n".join(f"- {s}" for s in prof["samples"][:n_samples]))
+    if you := pronoun(theirs or [p["me"] for p in shots]):
+        parts.append(f"With this person I say '{you}' for 'you'.")
+    samples = random.Random(len(history)).sample(theirs, min(n_samples, len(theirs))) if theirs else \
+        prof.get("samples", [])[:n_samples]
+    if samples:
+        parts.append("Some of my real messages" + (" to this person" if theirs else "") + ":\n" +
+                     "\n".join(f"- {s}" for s in samples))
     if shots:
         parts.append("How I replied in similar situations:\n" + "\n\n".join(
             f"[{p['contact']}]: {p['them']}\n[me]: {p['me']}" for p in shots))
+    parts.append(HUMAN_RULES)
     if safe_mode:
         parts.append(SAFE_RULE)
         if sensitive:
@@ -157,3 +223,27 @@ def build_messages(style: dict, contact: str | None, history: list[tuple[bool, s
         else:
             msgs.append({"role": role, "content": text})
     return msgs
+
+
+def enforce_style(lines: list[str], prof: dict, rng: random.Random = random) -> list[str]:
+    """Strip what I never do: '!' / '.' endings I don't use, emojis outside my set, emojis above my rate."""
+    swaps = prof.get("spellings", {})
+    allowed = set(prof.get("top_emojis", []))
+    ends = prof.get("ends_with", {})
+    keep_emoji = rng.random() < prof.get("emoji_message_share", 0.2) * 1.5
+    out = []
+    for ln in lines:
+        ln = EMOJI.sub(lambda m: m.group() if keep_emoji and m.group() in allowed else "", ln)
+        ln = ln.replace("\ufe0f", "") if not keep_emoji else ln
+        if ends.get("!", 1) < 0.03:
+            ln = re.sub(r"!+", "", ln)
+        if ends.get(".", 1) < 0.03:
+            ln = re.sub(r"(?<!\.)\.\s*$", "", ln)
+        if swaps:
+            ln = re.sub(r"\b(" + "|".join(map(re.escape, swaps)) + r")\b",
+                        lambda m: swaps[m.group().lower()] if m.group().islower() else swaps[m.group().lower()].capitalize(),
+                        ln, flags=re.I)
+        ln = re.sub(r"\s{2,}", " ", ln).strip()
+        if ln:
+            out.append(ln)
+    return out

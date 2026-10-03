@@ -63,3 +63,20 @@ def test_reply_cleanup_and_timing():
     rng = random.Random(1)
     assert all(15 <= human_delay("x" * n, rng) <= 90 for n in (0, 20, 400))
     assert human_delay("ok", random.Random(1)) < human_delay("x" * 150, random.Random(1))
+
+
+def test_live_failures():
+    from bot.rules import BOT_SUSPECT
+    # admitted being a bot, Hinglish
+    assert clean_reply("Arre bhai… sach bolta hoon — main bot hoon.") == []
+    assert clean_reply("Bas tumhari style copy karke reply deta hoon") == []
+    # wrote code
+    assert clean_reply('<?php\necho "Hello";\n?>') == []
+    # essays, markdown, fake photo
+    out = clean_reply("Ekdum masterpiece! 🔥 Walter White ka transformation… chills aati hai har episode mein. "
+                      "Bas thoda intense hai, par padhne layak show. Tum dekhte ho?\n*Click!*\n"
+                      "📸 [Selfie: chasma, grey t-shirt]\nline4\nline5")
+    assert len(out) <= 3 and all(len(ln) <= 90 for ln in out) and not any("Selfie" in ln or "*" in ln for ln in out)
+    assert BOT_SUSPECT.search("Mujhe ye feel ara hai tu aman nhi hai you are a bot")
+    assert not BOT_SUSPECT.search("bhai kal aayega?") and not BOT_SUSPECT.search("Main abhi aai hu")
+    assert is_sensitive(["Theek hai mai call krta hu"]) and is_sensitive(["Apni selfie bhejo"])

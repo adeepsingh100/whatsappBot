@@ -15,11 +15,19 @@ SENSITIVE = re.compile(
     r"upi|gpay|paytm|phonepe|transfer|bank|loan|udh?aa?r|borrow|lend|rent|fees?|emi|salary|invest|"
     r"promise|pakka|confirm|commit|guarantee|vaada|wada|"
     r"plan|meet|milte|milo|milna|aaja|aaoge|aayega|aa\s?raha|party|trip|tonight|tomorrow|weekend|"
+    r"call|video|selfie|photo|pic|pics|address|location|"
     r"died|death|passed away|accident|hospital|icu|cancer|funeral|serious|emergency|"
     r"expired|guzar|nahi rahe|breakup|divorce|fired|lost (my|his|her) job)\b)",
     re.I,
 )
-AI_LEAK = re.compile(r"\b(as an ai|an ai\b|language model|i('| a)m (just )?a bot|chatbot|assistant)\b", re.I)
+AI_LEAK = re.compile(r"\b(as an ai|an ai|language model|chatbot|assistant|bot|robot|ai|gpt|chatgpt|"
+                     r"automated|style copy|tumhari awaaz|tumhari awaz)\b", re.I)
+# Someone suspects a bot: a real reply can't win that argument, so go quiet in that chat instead.
+BOT_SUSPECT = re.compile(r"\b(bot|robot|ai|a\.i\.?|chat\s?gpt|gpt|automated|auto\s?reply|machine|fake)\b", re.I)
+SUSPECT_QUIET = 12 * 3600
+# Asked to do assistant work (code, essays...): a busy friend wouldn't, so don't.
+CODE = re.compile(r"(<\?php|```|[{};]\s*$|^\s*(def|function|class|import|echo|print)\b)", re.M)
+MAX_LINES, MAX_LINE_CHARS = 3, 90
 
 
 @dataclass
@@ -115,5 +123,14 @@ def clean_reply(text: str) -> list[str]:
     text = text.strip().strip('"“”').strip()
     if not text or AI_LEAK.search(text):
         return []
+    if CODE.search(text):
+        return []
+    text = re.sub(r"\[[^\]]*\]|\*[^*\n]{12,}\*", "", text)            # [Selfie: ...], *long stage directions*
+    text = re.sub(r"[*_`#]+", "", text).replace("…", " ").replace("...", " ")  # markdown, trailing-off dots
     lines = [re.sub(r"^\s*(\[?me\]?)\s*:\s*", "", ln, flags=re.I).strip() for ln in text.splitlines()]
-    return [ln for ln in lines if ln][:4]
+    out = []
+    for ln in filter(None, lines):
+        if len(ln) > MAX_LINE_CHARS:  # keep the first sentence only, like a quick text
+            ln = re.split(r"(?<=[.?!])\s", ln)[0][:MAX_LINE_CHARS].rsplit(" ", 1)[0]
+        out.append(re.sub(r"\s{2,}", " ", ln).strip())
+    return [ln for ln in out if ln][:MAX_LINES]

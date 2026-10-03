@@ -21,6 +21,10 @@ if not chats:
 for c in chats:
     print(f"{c.contact:<25} me={c.me:<15} {len(c.msgs):>6} msgs{'  (group: profile only)' if c.is_group else ''}")
 style = build_style(chats)
+about = Path(os.getenv("ABOUT_PATH", "data/about.md"))
+if about.exists():
+    style["about"] = "\n".join(ln for ln in about.read_text().splitlines() if ln.strip() and not ln.startswith("#"))
+    print(f"Added facts from {about}")
 out.write_text(json.dumps(style, ensure_ascii=False, indent=1))
 p = style["profile"]
 print(f"\n{p['messages']} of my messages, {len(style['pairs'])} reply pairs -> {out}")

@@ -34,3 +34,27 @@ def test_retrieval_and_prompt():
     assert "commit to nothing" in msgs[0]["content"]
     assert [m["role"] for m in msgs] == ["system", "user", "assistant"]
     assert msgs[1]["content"] == "hi\npaise chahiye"
+
+
+def test_human_touches():
+    import random
+    from bot.style import enforce_style, pronoun, same_contact
+    assert same_contact("Savi", "Savi❤️") and same_contact("Utkarsh", "Utkarsh BA Bebo")
+    assert not same_contact("Rahul", "Savi❤️") and not same_contact(None, "Savi")
+    assert pronoun(["aap kaha ho", "apko pta", "aap aao"]) == "aap" and pronoun(["ok"]) is None
+    prof = {"top_emojis": ["😂"], "emoji_message_share": 0.18, "ends_with": {"!": 0.0, ".": 0.0}}
+    never = random.Random(0); never.random = lambda: 0.99      # emoji roll fails
+    always = random.Random(0); always.random = lambda: 0.0
+    assert enforce_style(["Delhi! 😊", "Good morning! ☀️"], prof, never) == ["Delhi", "Good morning"]
+    assert enforce_style(["haha 😂😊", "ok."], prof, always) == ["haha 😂", "ok"]
+    assert enforce_style(["😊"], prof, never) == []
+
+
+def test_contact_prefix_and_spellings():
+    from collections import Counter
+    from bot.style import enforce_style, same_contact, spellings
+    assert same_contact("Savita Hooda", "Savi❤️") and not same_contact("Sa", "Savi")
+    sp = spellings(Counter({"hu": 50, "hoon": 2, "mai": 40, "main": 1, "nahi": 30, "nhi": 5}))
+    assert sp == {"hoon": "hu", "main": "mai"}
+    prof = {"spellings": sp, "ends_with": {}, "top_emojis": []}
+    assert enforce_style(["Main theek hoon, main road pe"], prof) == ["Mai theek hu, mai road pe"]
