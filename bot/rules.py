@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 MAX_AGE = 30 * 60          # skip messages older than this (overnight backlog)
 QUIET_FOR = 30 * 60        # stay quiet in a chat after I type there myself
 BATCH_WAIT = 8             # wait for more messages before replying
-COMMANDS = {"/on", "/off", "/status"}
+COMMANDS = {"/on", "/off", "/status", "/ignore", "/unignore", "/ignored"}
 
 # ponytail: keyword list, misses paraphrases; the LLM also gets SAFE_RULE so it can catch the rest
 SENSITIVE = re.compile(
@@ -85,9 +85,19 @@ def too_old(m: Incoming, now: float) -> bool:
     return m.ts is not None and now - m.ts > MAX_AGE
 
 
-def command(text: str | None) -> str | None:
-    t = (text or "").strip().lower()
-    return t if t in COMMANDS else None
+def command(text: str | None) -> tuple[str, str] | None:
+    """'/ignore +91 98123 45678' -> ('/ignore', '+91 98123 45678'); not a command -> None."""
+    name, _, arg = (text or "").strip().partition(" ")
+    return (name.lower(), arg.strip()) if name.lower() in COMMANDS else None
+
+
+def phone_key(number: str) -> str:
+    """Last 10 digits, so '+91 98123-45678' and '9812345678' match."""
+    return re.sub(r"\D", "", number)[-10:]
+
+
+def is_ignored(m: Incoming, ignored: set[str]) -> bool:
+    return bool(ignored & {phone_key(user(j)) for j in (m.chat, m.sender, m.sender_alt) if j})
 
 
 def is_sensitive(texts: list[str]) -> bool:

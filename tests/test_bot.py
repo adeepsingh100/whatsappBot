@@ -108,3 +108,14 @@ def test_replies_page(monkeypatch, tmp_path):
     assert c.get("/replies", params={"key": "x"}).status_code == 403
     page = c.get("/replies", params={"key": "k"}).text
     assert "Rahul" in page and "+919800000001" in page and "&lt;b&gt;aa" in page and "OFF" in page
+
+
+def test_ignore_list(monkeypatch, tmp_path):
+    sent, _ = setup(monkeypatch, tmp_path)
+    main.db.set("switch", "on")
+    run(cmd("/ignore 98000 00001", "i1"))
+    assert sent[-1] == (ME, "🤖 ignoring: 9800000001")
+    run(evt("hi", ts=now_ts(), mid="r1"))
+    assert len(sent) == 1                                                      # Rahul ignored
+    run(cmd("/ignored", "i2"), cmd("/unignore +919800000001", "i3"), evt("hi?", ts=now_ts(), mid="r2"))
+    assert sent[1:] == [(ME, "🤖 ignoring: 9800000001"), (ME, "🤖 ignoring: nobody"), (RAHUL, "haan bhai")]

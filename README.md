@@ -16,6 +16,7 @@ Auto-replies to your personal WhatsApp 1-to-1 chats in your own writing style.
 - **Safe mode** (`SAFE_MODE=true`, the default): when a message is about money, plans, promises or bad news, it replies vaguely ("dekhta hoon, baad mein batata hoon") and agrees to nothing.
 - It never sends a reply that sounds like "as an AI…". It logs every reply to the DB.
 - The only control is in WhatsApp's **Message yourself** chat: `/on`, `/off`, `/status`. The switch is stored in the DB and starts **off**.
+- To never reply to someone, send `/ignore 919812345678` in the same chat. `/unignore 919812345678` removes them and `/ignored` shows the list. Only the last 10 digits are compared, so the country code is optional.
 
 ## Setup
 

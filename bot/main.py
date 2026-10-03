@@ -16,7 +16,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from bot import llm
 from bot.db import DB
-from bot.rules import (BATCH_WAIT, QUIET_FOR, clean_reply, command, human_delay, is_direct_chat, is_self_chat,
+from bot.rules import (BATCH_WAIT, QUIET_FOR, clean_reply, command, human_delay, is_direct_chat, is_ignored,
+                       is_self_chat, phone_key,
                        is_sensitive, parse_message, too_old)
 from bot.style import build_messages
 
@@ -107,7 +108,22 @@ async def setup_instance() -> None:
             await asyncio.sleep(15)
 
 
-async def run_command(cmd: str, chat: str) -> None:
+def ignored_numbers() -> set[str]:
+    return set(filter(None, (db.get("ignore") or "").split(",")))
+
+
+async def run_command(cmd: str, arg: str, chat: str) -> None:
+    if cmd in ("/ignore", "/unignore", "/ignored"):
+        nums = await asyncio.to_thread(ignored_numbers)
+        key = phone_key(arg)
+        if cmd != "/ignored" and len(key) < 10:
+            return await send_text(chat, f"🤖 usage: {cmd} 919812345678")
+        if cmd == "/ignore":
+            nums.add(key)
+        elif cmd == "/unignore":
+            nums.discard(key)
+        await asyncio.to_thread(db.set, "ignore", ",".join(sorted(nums)))
+        return await send_text(chat, "🤖 ignoring: " + (", ".join(sorted(nums)) or "nobody"))
     if cmd in ("/on", "/off"):
         await asyncio.to_thread(db.set, "switch", cmd[1:])
         if cmd == "/off":
@@ -195,7 +211,7 @@ async def handle(payload: dict) -> None:
              m.from_me, m.text is not None)
     if is_self_chat(m, MY_NUMBER):
         if cmd := command(m.text):
-            await run_command(cmd, m.chat)
+            await run_command(*cmd, m.chat)
         return
     if not is_direct_chat(m):
         return
@@ -209,7 +225,7 @@ async def handle(payload: dict) -> None:
         return
     if not m.text or too_old(m, now) or S.quiet.get(m.chat, 0) > now:
         return
-    if not await asyncio.to_thread(db.is_on):
+    if not await asyncio.to_thread(db.is_on) or is_ignored(m, await asyncio.to_thread(ignored_numbers)):
         return
     if m.push_name:
         S.names[m.chat] = m.push_name

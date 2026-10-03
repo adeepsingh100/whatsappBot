@@ -1,7 +1,7 @@
 import random
 from datetime import datetime, timezone
 
-from bot.rules import (clean_reply, command, human_delay, is_direct_chat, is_self_chat, is_sensitive,
+from bot.rules import (clean_reply, command, is_ignored, phone_key, human_delay, is_direct_chat, is_self_chat, is_sensitive,
                        parse_message, too_old)
 
 
@@ -47,7 +47,10 @@ def test_self_chat():
 
 
 def test_commands_and_safe_mode():
-    assert command(" /ON ") == "/on" and command("/status") == "/status" and command("/onx") is None
+    assert command(" /ON ") == ("/on", "") and command("/status") == ("/status", "") and command("/onx") is None
+    assert command("/ignore +91 98000 00001") == ("/ignore", "+91 98000 00001")
+    m = parse_message(evt(chat="919800000001@s.whatsapp.net"))
+    assert is_ignored(m, {phone_key("+91 98000-00001")}) and not is_ignored(m, {phone_key("9811111111")})
     assert is_sensitive(["bhai 2000 udhaar de"]) and is_sensitive(["can you pay me back"])
     assert is_sensitive(["kal milte hai?"]) and is_sensitive(["uske papa hospital mein hai"])
     assert not is_sensitive(["haha mast", "kya kar raha"])
