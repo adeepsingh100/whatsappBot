@@ -120,6 +120,10 @@ async def run_command(cmd: str, arg: str, chat: str) -> None:
             return await send_text(chat, f"🤖 usage: {cmd} 919812345678")
         if cmd == "/ignore":
             nums.add(key)
+            for c in [c for c in S.pending if phone_key(c.split("@")[0]) == key]:  # drop replies already scheduled
+                if (t := S.tasks.get(c)) and not t.done() and c not in S.sending:
+                    t.cancel()
+                S.pending.pop(c, None)
         elif cmd == "/unignore":
             nums.discard(key)
         await asyncio.to_thread(db.set, "ignore", ",".join(sorted(nums)))
@@ -173,7 +177,8 @@ async def reply_task(chat: str) -> None:
         except httpx.HTTPError as e:
             log.warning("read/typing for %s failed: %s", chat, e)
             await asyncio.sleep(typing)
-        if S.quiet.get(chat, 0) > time.time() or not await asyncio.to_thread(db.is_on):
+        if (S.quiet.get(chat, 0) > time.time() or not await asyncio.to_thread(db.is_on)
+                or is_ignored(batch[-1], await asyncio.to_thread(ignored_numbers))):  # re-check right before sending
             S.pending.pop(chat, None)
             return
         S.sending.add(chat)

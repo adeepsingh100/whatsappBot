@@ -128,3 +128,11 @@ def test_bot_question_skipped_without_cooldown(monkeypatch, tmp_path):
     assert sent == []                                                          # that message: no reply
     run(evt("acha chal kal milte", ts=now_ts(), mid="b2"))
     assert sent == [(RAHUL, "haan bhai")]                                      # next one: normal, no cooldown
+
+
+def test_ignore_cancels_scheduled_reply(monkeypatch, tmp_path):
+    sent, _ = setup(monkeypatch, tmp_path)
+    main.db.set("switch", "on")
+    monkeypatch.setattr(main, "BATCH_WAIT", 0.2)
+    run(evt("hi", ts=now_ts(), mid="s1"), cmd("/ignore 9800000001", "s2"), wait=0.5)
+    assert sent == [(ME, "🤖 ignoring: 9800000001")]                          # scheduled reply dropped
