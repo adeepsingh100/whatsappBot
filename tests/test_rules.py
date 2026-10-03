@@ -80,3 +80,10 @@ def test_live_failures():
     assert BOT_SUSPECT.search("Mujhe ye feel ara hai tu aman nhi hai you are a bot")
     assert not BOT_SUSPECT.search("bhai kal aayega?") and not BOT_SUSPECT.search("Main abhi aai hu")
     assert is_sensitive(["Theek hai mai call krta hu"]) and is_sensitive(["Apni selfie bhejo"])
+
+
+def test_echo():
+    from bot.rules import is_echo
+    assert is_echo("Okay", ["Okay"]) and is_echo("Kab aai thi m?", ["Kab aai thi m"])
+    assert not is_echo("Hii", ["Hii", "Kya kar rahe ho"]) and not is_echo("Good morning ji", ["Good morning"])
+    assert not is_echo("Kaam krra hu", ["Kya kar rahe ho"])

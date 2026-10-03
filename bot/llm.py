@@ -5,7 +5,8 @@ import os
 import httpx
 
 log = logging.getLogger("bot.llm")
-NVIDIA_MODELS = "nvidia/nemotron-3-super-120b-a12b,openai/gpt-oss-20b"
+# Bake-off on real past chats (Oct 2026): ultra reads most human; kimi/deepseek/gemma/glm time out on free tier
+NVIDIA_MODELS = "nvidia/nemotron-3-ultra-550b-a55b,openai/gpt-oss-20b,nvidia/nemotron-3-super-120b-a12b"
 
 
 def providers() -> list[dict]:
@@ -27,8 +28,8 @@ def providers() -> list[dict]:
     return out
 
 
-async def complete(messages: list[dict], temperature: float = 0.8, max_tokens: int = 150) -> str:
-    """First provider that answers wins. 429/5xx/timeouts move on to the next one."""
+async def complete(messages: list[dict], temperature: float = 0.8, max_tokens: int = 150, accept=None) -> str:
+    """First provider that answers wins. 429/5xx/timeouts, or a reply `accept` rejects, move on to the next one."""
     errors = []
     async with httpx.AsyncClient(timeout=30) as client:
         for p in providers():
@@ -41,9 +42,11 @@ async def complete(messages: list[dict], temperature: float = 0.8, max_tokens: i
                     raise httpx.HTTPStatusError(f"HTTP {r.status_code}", request=r.request, response=r)
                 r.raise_for_status()
                 text = r.json()["choices"][0]["message"]["content"] or ""
-                if text.strip():
-                    return text.strip()
-                raise ValueError("empty reply")
+                if not text.strip():
+                    raise ValueError("empty reply")
+                if accept and not accept(text):
+                    raise ValueError(f"rejected reply {text.strip()[:40]!r}")
+                return text.strip()
             except (httpx.HTTPError, ValueError, KeyError) as e:
                 log.warning("LLM %s failed: %s", p["name"], e)
                 errors.append(f"{p['name']}: {e!r}")

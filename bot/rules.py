@@ -112,6 +112,16 @@ def is_sensitive(texts: list[str]) -> bool:
     return any(SENSITIVE.search(t) for t in texts)
 
 
+GREETINGS = {"hi", "hii", "hiii", "hello", "hey", "good", "morning", "night", "gn", "gm", "ji", "jii"}
+
+
+def is_echo(reply: str, incoming: list[str]) -> bool:
+    """Reply only repeats their words ('Okay' -> 'Okay', 'Kab aai thi?' -> 'Kab aai thi?'). Greetings back are fine."""
+    said = {w for t in incoming for w in re.findall(r"\w+", t.lower())}
+    words = set(re.findall(r"\w+", reply.lower()))
+    return bool(words) and words <= said and not words <= GREETINGS
+
+
 def human_delay(reply: str, rng: random.Random = random) -> float:
     """15-90 s: some 'reading' time plus ~typing speed, with jitter."""
     return max(15.0, min(90.0, rng.uniform(8, 25) + len(reply) * rng.uniform(0.25, 0.5)))
