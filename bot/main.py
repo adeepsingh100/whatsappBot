@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from bot import llm
 from bot.db import DB
-from bot.rules import (BATCH_WAIT, BOT_SUSPECT, QUIET_FOR, addressed_to_me, is_echo, is_group_chat, strip_mentions, user, clean_reply, command, human_delay, is_direct_chat, is_ignored,
+from bot.rules import (BATCH_WAIT, BOT_SUSPECT, QUIET_FOR, addressed_to_me, is_echo, is_group_chat, strip_mentions, user, with_context, clean_reply, command, human_delay, is_direct_chat, is_ignored,
                        is_self_chat, phone_key,
                        is_sensitive, parse_message, too_old)
 from bot.style import build_messages, enforce_style
@@ -162,9 +162,9 @@ async def reply_task(chat: str) -> None:
             log.warning("%s asked about a bot: not replying to that message", chat)
             return
         msgs = build_messages(S.style, S.names.get(chat), list(S.history[chat]), SAFE_MODE,
-                              SAFE_MODE and is_sensitive(texts), group=chat.endswith("@g.us"))
+                              SAFE_MODE and is_sensitive(texts), group=chat.endswith("@g.us"), n_new=len(batch))
         reply = await llm.complete(msgs, accept=lambda t: not is_echo(t, texts))
-        out = enforce_style(clean_reply(reply), S.style.get("profile", {}))
+        out = enforce_style(clean_reply(reply), S.style.get("profile", {}), min_lines=len(batch))
         if not out:
             log.warning("Empty/unsafe LLM reply for %s, skipping", chat)
             S.pending.pop(chat, None)
@@ -243,8 +243,9 @@ async def handle(payload: dict) -> None:
     if not (is_direct_chat(m) or group):
         return
     if m.text:  # in groups, keep who said what so the model sees the conversation
-        S.history[m.chat].append((m.from_me, strip_mentions(m.text) if m.from_me or not group
-                                  else f"{m.push_name or user(m.sender)}: {strip_mentions(m.text)}"))
+        line = with_context(m, S.me)
+        S.history[m.chat].append((m.from_me, line if m.from_me or not group
+                                  else f"{m.push_name or user(m.sender)}: {line}"))
     if m.from_me:  # I typed here myself: back off
         S.quiet[m.chat] = now + QUIET_FOR
         if (t := S.tasks.get(m.chat)) and not t.done() and m.chat not in S.sending:

@@ -42,6 +42,7 @@ class Incoming:
     sender_alt: str = ""
     mentions: tuple[str, ...] = ()   # JIDs @mentioned in the message
     quoted: str = ""                 # author JID of the message this one replies to
+    quoted_text: str = ""            # text of that message ("[media]" if it had none)
 
 
 def user(jid: str) -> str:
@@ -78,7 +79,24 @@ def parse_message(payload: dict) -> Incoming | None:
                     ts=_ts(info.get("Timestamp")), text=text.strip() if text else None,
                     push_name=info.get("PushName") or "", sender_alt=info.get("SenderAlt") or "",
                     mentions=tuple(ctx.get("mentionedJID") or ctx.get("mentionedJid") or ()),
-                    quoted=ctx.get("participant") or "")
+                    quoted=ctx.get("participant") or "", quoted_text=_quoted_text(ctx.get("quotedMessage")))
+
+
+def _quoted_text(q: dict | None) -> str:
+    if not q:
+        return ""
+    t = q.get("conversation") or (q.get("extendedTextMessage") or {}).get("text") or \
+        next((v.get("caption") for v in q.values() if isinstance(v, dict) and v.get("caption")), None)
+    return (t or "[media]").strip()
+
+
+def with_context(m: Incoming, me: set[str]) -> str:
+    """Message text for the model, with the message it replies to (swipe-reply) and mentions cleaned up."""
+    text = strip_mentions(m.text or "")
+    if m.quoted_text:
+        whose = "my" if user(m.quoted) in me else "their"
+        text = f'[replying to {whose} message: "{m.quoted_text[:150]}"] {text}'
+    return text
 
 
 def is_direct_chat(m: Incoming) -> bool:

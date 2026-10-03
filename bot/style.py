@@ -193,7 +193,7 @@ HUMAN_RULES = """Sound like me texting from my phone, not like an assistant:
 
 def build_messages(style: dict, contact: str | None, history: list[tuple[bool, str]],
                    safe_mode: bool = True, sensitive: bool = False, n_samples: int = 15,
-                   group: bool = False) -> list[dict]:
+                   group: bool = False, n_new: int = 1) -> list[dict]:
     """OpenAI-style chat messages. history = [(from_me, text), ...] oldest first, last ~10."""
     prof = style.get("profile", {})
     pairs = style.get("pairs", [])
@@ -220,6 +220,11 @@ def build_messages(style: dict, contact: str | None, history: list[tuple[bool, s
         parts.append(SAFE_RULE)
         if sensitive:
             parts.append("This conversation touches one of those topics: stay vague, commit to nothing.")
+    parts.append('A line starting with [replying to ... message: "..."] is a swipe-reply to that quoted message; '
+                 "answer it in that context.")
+    if n_new > 1:
+        parts.append(f"They sent {n_new} messages in a row. Answer each one that needs an answer, "
+                     "one short line each, in order. Skip ones that need no answer.")
     if group:
         parts.append("This is a GROUP chat: their lines start with 'Name: '. Someone just talked to me directly. "
                      "Reply to that one person in one short line; don't address the whole group.")
@@ -235,7 +240,7 @@ def build_messages(style: dict, contact: str | None, history: list[tuple[bool, s
     return msgs
 
 
-def enforce_style(lines: list[str], prof: dict, rng: random.Random = random) -> list[str]:
+def enforce_style(lines: list[str], prof: dict, rng: random.Random = random, min_lines: int = 1) -> list[str]:
     """Strip what I never do: '!' / '.' endings I don't use, emojis outside my set, emojis above my rate."""
     swaps = prof.get("spellings", {})
     allowed = set(prof.get("top_emojis", []))
@@ -243,7 +248,7 @@ def enforce_style(lines: list[str], prof: dict, rng: random.Random = random) -> 
     keep_emoji = rng.random() < prof.get("emoji_message_share", 0.2) * 1.5
     weights = prof.get("reply_lines")
     if weights:  # send as many messages as I usually do; the first lines are the actual answer
-        lines = lines[:rng.choices(range(1, 5), weights=weights)[0]]
+        lines = lines[:max(rng.choices(range(1, 5), weights=weights)[0], min(min_lines, 3))]
     out = []
     for ln in lines:
         ln = EMOJI.sub(lambda m: m.group() if keep_emoji and m.group() in allowed else "", ln)

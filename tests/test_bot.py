@@ -166,3 +166,19 @@ def test_learns_my_ids_from_my_messages(monkeypatch, tmp_path):
     setup(monkeypatch, tmp_path)
     run(gmsg("hello", "m1", sender="777000111:5@lid", from_me=True))
     assert "777000111" in main.S.me and "777000111" in main.db.get("me_ids")
+
+
+def test_swipe_reply_context_and_multi_answers(monkeypatch, tmp_path):
+    sent, prompts = setup(monkeypatch, tmp_path, reply="haan pakka\n7 baje\nok")
+    main.db.set("switch", "on")
+    main.S.me = {"919811111111"}
+    main.S.style = {"profile": {"reply_lines": [1, 0, 0, 0]}}                # normally 1 line only
+    monkeypatch.setattr(main.random, "uniform", lambda a, b: 0.01)            # gap between sent lines
+    p = evt("haan", ts=now_ts(), mid="q1")
+    p["data"]["Message"] = {"extendedTextMessage": {"text": "haan", "contextInfo": {
+        "participant": "919811111111@s.whatsapp.net", "quotedMessage": {"conversation": "kal chalega?"}}}}
+    run(p, evt("kitne baje?", ts=now_ts(), mid="q2"))
+    hist = prompts[-1][-1]["content"]
+    assert '[replying to my message: "kal chalega?"] haan' in hist and "kitne baje?" in hist
+    assert "2 messages in a row" in prompts[-1][0]["content"]
+    assert sent == [(RAHUL, "haan pakka"), (RAHUL, "7 baje")]                 # 2 messages in -> up to 2 out
