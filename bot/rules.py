@@ -22,9 +22,8 @@ SENSITIVE = re.compile(
 )
 AI_LEAK = re.compile(r"\b(as an ai|an ai|language model|chatbot|assistant|bot|robot|ai|gpt|chatgpt|"
                      r"automated|style copy|tumhari awaaz|tumhari awaz)\b", re.I)
-# Someone suspects a bot: a real reply can't win that argument, so go quiet in that chat instead.
+# Someone asks/suspects a bot: don't answer that message (no admitting, no denying), keep chatting after.
 BOT_SUSPECT = re.compile(r"\b(bot|robot|ai|a\.i\.?|chat\s?gpt|gpt|automated|auto\s?reply|machine|fake)\b", re.I)
-SUSPECT_QUIET = 12 * 3600
 # Asked to do assistant work (code, essays...): a busy friend wouldn't, so don't.
 CODE = re.compile(r"(<\?php|```|[{};]\s*$|^\s*(def|function|class|import|echo|print)\b)", re.M)
 MAX_LINES, MAX_LINE_CHARS = 3, 90

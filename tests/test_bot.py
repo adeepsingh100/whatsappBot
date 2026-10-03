@@ -119,3 +119,12 @@ def test_ignore_list(monkeypatch, tmp_path):
     assert len(sent) == 1                                                      # Rahul ignored
     run(cmd("/ignored", "i2"), cmd("/unignore +919800000001", "i3"), evt("hi?", ts=now_ts(), mid="r2"))
     assert sent[1:] == [(ME, "🤖 ignoring: 9800000001"), (ME, "🤖 ignoring: nobody"), (RAHUL, "haan bhai")]
+
+
+def test_bot_question_skipped_without_cooldown(monkeypatch, tmp_path):
+    sent, _ = setup(monkeypatch, tmp_path)
+    main.db.set("switch", "on")
+    run(evt("tu bot hai kya?", ts=now_ts(), mid="b1"))
+    assert sent == []                                                          # that message: no reply
+    run(evt("acha chal kal milte", ts=now_ts(), mid="b2"))
+    assert sent == [(RAHUL, "haan bhai")]                                      # next one: normal, no cooldown
