@@ -58,3 +58,15 @@ def test_contact_prefix_and_spellings():
     assert sp == {"hoon": "hu", "main": "mai"}
     prof = {"spellings": sp, "ends_with": {}, "top_emojis": []}
     assert enforce_style(["Main theek hoon, main road pe"], prof) == ["Mai theek hu, mai road pe"]
+
+
+def test_reply_line_count():
+    import random
+    from pathlib import Path
+    from bot.parser import load_chats
+    from bot.style import build_style, enforce_style
+    prof = build_style(load_chats(Path(__file__).parent / "fixtures", "Aman"))["profile"]
+    assert len(prof["reply_lines"]) == 4 and abs(sum(prof["reply_lines"]) - 1) < 0.01
+    lines = ["Mai so rha tha abhi utha", "Kaam dekh rha hu", "Tension mt lo sab theek hai"]
+    one = {"reply_lines": [1, 0, 0, 0], "ends_with": {}, "top_emojis": []}
+    assert enforce_style(lines, one, random.Random(1)) == ["Mai so rha tha abhi utha"]

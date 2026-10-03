@@ -115,7 +115,11 @@ def make_pairs(chat: Chat, max_them: int = 3, max_me: int = 5) -> list[dict]:
 def build_style(chats: list[Chat]) -> dict:
     mine = [m.text for c in chats for m in c.msgs if m.sender == c.me]
     pairs = [p for c in chats if not c.is_group for p in make_pairs(c)]
-    return {"profile": profile(mine), "pairs": pairs}
+    prof = profile(mine)
+    if pairs:  # how many messages I send per reply: share of 1, 2, 3, 4+
+        n = Counter(min(p["me"].count("\n") + 1, 4) for p in pairs)
+        prof["reply_lines"] = [round(n[i] / len(pairs), 3) for i in range(1, 5)]
+    return {"profile": prof, "pairs": pairs}
 
 
 def same_contact(a: str | None, b: str | None) -> bool:
@@ -176,6 +180,8 @@ HUMAN_RULES = """Sound like me texting from my phone, not like an assistant:
 - No "!" and no emoji unless my examples would have one. Never 😊 ☀️ 👋 style filler.
 - No assistant phrases ("Bilkul", "Sure", "Of course", "How can I help", "Let me know"), no over-friendly questions.
 - Often just answer in 1-5 words. Don't always ask a question back.
+- Answer only what they actually said. Don't add extra lines that react to things nobody said ("You too",
+  "Tension mt lo") or that contradict your first line.
 - Usually ONE short line (under 10 words). Never paragraphs, never markdown, never "..." trailing off.
 - Never describe photos, actions or feelings in [brackets] or *asterisks*. You can't send photos or make calls.
 - Never promise to call, meet, send something or do something later.
@@ -231,6 +237,9 @@ def enforce_style(lines: list[str], prof: dict, rng: random.Random = random) -> 
     allowed = set(prof.get("top_emojis", []))
     ends = prof.get("ends_with", {})
     keep_emoji = rng.random() < prof.get("emoji_message_share", 0.2) * 1.5
+    weights = prof.get("reply_lines")
+    if weights:  # send as many messages as I usually do; the first lines are the actual answer
+        lines = lines[:rng.choices(range(1, 5), weights=weights)[0]]
     out = []
     for ln in lines:
         ln = EMOJI.sub(lambda m: m.group() if keep_emoji and m.group() in allowed else "", ln)
