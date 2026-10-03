@@ -98,3 +98,11 @@ def test_no_abuse():
     for ok in ("kal chalega?", "Good morning", "sale chal rahi hai mall mai", "gandhi jayanti", "chutti hai kal",
                "main road", "bhai mast"):
         assert not ABUSE.search(ok), ok
+
+
+def test_split_reply():
+    from bot.rules import split_reply
+    u, r = split_reply("UNDERSTANDING: friend means my wife\nwants me to agree\nREPLY: dekhta hu\nbaad mai")
+    assert u.startswith("friend means my wife") and r == "dekhta hu\nbaad mai"
+    assert split_reply("UNDERSTANDING: only thoughts, no reply") is None
+    assert split_reply("haan bhai") == ("", "haan bhai")                     # model ignored the format: fine

@@ -47,7 +47,8 @@ def test_human_touches():
     always = random.Random(0); always.random = lambda: 0.0
     assert enforce_style(["Delhi! 😊", "Good morning! ☀️"], prof, never) == ["Delhi", "Good morning"]
     assert enforce_style(["haha 😂😊", "ok."], prof, always) == ["haha 😂", "ok"]
-    assert enforce_style(["😊"], prof, never) == []
+    assert enforce_style(["😊"], prof, never) == ["😂"]                    # emoji-only: swap to one of mine
+    assert enforce_style(["😂😂😂"], prof, never) == ["😂😂"]
 
 
 def test_contact_prefix_and_spellings():

@@ -28,7 +28,7 @@ def providers() -> list[dict]:
     return out
 
 
-async def complete(messages: list[dict], temperature: float = 0.8, max_tokens: int = 150, accept=None) -> str:
+async def complete(messages: list[dict], temperature: float = 0.8, max_tokens: int = 400, accept=None) -> str:
     """First provider that answers wins. 429/5xx/timeouts, or a reply `accept` rejects, move on to the next one."""
     errors = []
     async with httpx.AsyncClient(timeout=30) as client:

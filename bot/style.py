@@ -176,6 +176,15 @@ def describe(p: dict) -> str:
     ])
 
 
+THINK_FIRST = """Before replying, understand the conversation. Answer in exactly this format:
+UNDERSTANDING: 2-4 short lines in English: what we're talking about (use the whole chat, not just the last
+message); what their latest message means and what they expect from me; who each person/relation refers to FROM
+THEIR POINT OF VIEW (e.g. if a friend says "bhabhi" or "your wife" they mean MY wife; "jiju" = my sister's
+husband); which facts I actually know from "Facts about me" or the chat, and which I don't (never make those up);
+whether they're asking me to agree to a plan, money or promise (then stay vague).
+REPLY: only my WhatsApp message(s), one per line, consistent with that understanding."""
+
+
 HUMAN_RULES = """Sound like me texting from my phone, not like an assistant:
 - Copy my spellings and short forms from the examples exactly (don't "correct" them into proper Hindi or English).
 - No "!" and no emoji unless my examples would have one. Never 😊 ☀️ 👋 style filler.
@@ -231,8 +240,7 @@ def build_messages(style: dict, contact: str | None, history: list[tuple[bool, s
     if group:
         parts.append("This is a GROUP chat: their lines start with 'Name: '. Reply like I'd chip in to the group, "
                      "in one short line; reply to the latest message(s).")
-    parts.append(f"You are chatting with {contact or 'a contact'}. Reply with only my next message text. "
-                 "If I'd send several short messages, put each on its own line.")
+    parts.append(f"You are chatting with {contact or 'a contact'}. " + THINK_FIRST)
     msgs = [{"role": "system", "content": "\n\n".join(parts)}]
     for mine, text in history:
         role = "assistant" if mine else "user"
@@ -254,6 +262,11 @@ def enforce_style(lines: list[str], prof: dict, rng: random.Random = random, min
         lines = lines[:max(rng.choices(range(1, 5), weights=weights)[0], min(min_lines, 3))]
     out = []
     for ln in lines:
+        if not EMOJI.sub("", ln).strip(" \ufe0f\u200d"):  # emoji-only reply ("😂") is very human: keep one of mine
+            mine = [e for e in EMOJI.findall(ln) if e in allowed]
+            ln = mine[0] * min(len(mine), 2) if mine else (prof.get("top_emojis") or ["😂"])[0]
+            out.append(ln)
+            continue
         ln = EMOJI.sub(lambda m: m.group() if keep_emoji and m.group() in allowed else "", ln)
         ln = ln.replace("\ufe0f", "") if not keep_emoji else ln
         if ends.get("!", 1) < 0.03:

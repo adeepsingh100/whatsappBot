@@ -174,6 +174,15 @@ def human_delay(reply: str, rng: random.Random = random) -> float:
     return max(15.0, min(90.0, rng.uniform(8, 25) + len(reply) * rng.uniform(0.25, 0.5)))
 
 
+def split_reply(text: str) -> tuple[str, str] | None:
+    """'UNDERSTANDING: ... REPLY: ...' -> (understanding, reply). None if the model skipped REPLY."""
+    m = re.search(r"\bREPLY\s*:\s*(.*)", text, re.S | re.I)
+    if not m:
+        return None if re.search(r"\bUNDERSTANDING\s*:", text, re.I) else ("", text.strip())
+    u = re.search(r"\bUNDERSTANDING\s*:\s*(.*?)\bREPLY\s*:", text, re.S | re.I)
+    return (u.group(1).strip() if u else ""), m.group(1).strip()
+
+
 def clean_reply(text: str) -> list[str]:
     """LLM output -> list of WhatsApp messages to send. Empty list = don't send."""
     text = re.sub(r"^\s*(\[?me\]?|you)\s*:\s*", "", text.strip(), flags=re.I)

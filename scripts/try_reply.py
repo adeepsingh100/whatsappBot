@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from bot import llm  # noqa: E402
-from bot.rules import ABUSE, clean_reply, is_echo, is_sensitive  # noqa: E402
+from bot.rules import ABUSE, clean_reply, is_echo, split_reply, is_sensitive  # noqa: E402
 from bot.style import build_messages, enforce_style  # noqa: E402
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -45,8 +45,12 @@ while True:
     msgs = build_messages(style, contact, history[-10:], safe, sensitive)
     if show_prompt:
         print(msgs[0]["content"], "\n" + "-" * 40)
-    out = enforce_style(clean_reply(asyncio.run(llm.complete(msgs, accept=lambda t: not is_echo(t, pending) and not ABUSE.search(t)))),
-                        style.get("profile", {}))
+    def usable(t):
+        parts = split_reply(t)
+        return bool(parts and parts[1]) and not is_echo(parts[1], pending) and not ABUSE.search(parts[1])
+    understanding, reply = split_reply(asyncio.run(llm.complete(msgs, accept=usable)))
+    print("  (understood: " + understanding.replace("\n", " | ") + ")")
+    out = enforce_style(clean_reply(reply), style.get("profile", {}), min_lines=len(pending))
     for r in out or ["(no reply: empty or looked like an AI answer)"]:
         print(f"  me> {r}")
     if sensitive:

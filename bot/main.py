@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from bot import llm
 from bot.db import DB
-from bot.rules import (ABUSE, BATCH_WAIT, BOT_SUSPECT, QUIET_FOR, aimed_at_someone_else, is_echo, is_group_chat, strip_mentions, user, with_context, clean_reply, command, human_delay, is_direct_chat, is_ignored,
+from bot.rules import (ABUSE, BATCH_WAIT, split_reply, BOT_SUSPECT, QUIET_FOR, aimed_at_someone_else, is_echo, is_group_chat, strip_mentions, user, with_context, clean_reply, command, human_delay, is_direct_chat, is_ignored,
                        is_self_chat, phone_key,
                        is_sensitive, parse_message, too_old)
 from bot.style import build_messages, enforce_style
@@ -42,7 +42,7 @@ class State:
         self.seen: dict[str, float] = {}          # message IDs already handled (webhook retries)
         self.bot_sent: dict[str, float] = {}      # IDs of messages the bot sent
         self.quiet: dict[str, float] = {}         # chat -> stay quiet until
-        self.history: dict[str, deque] = defaultdict(lambda: deque(maxlen=10))  # chat -> (from_me, text)
+        self.history: dict[str, deque] = defaultdict(lambda: deque(maxlen=30))  # chat -> (from_me, text)
         self.pending: dict[str, list] = defaultdict(list)  # chat -> Incoming waiting for a reply
         self.names: dict[str, str] = {}           # chat -> push name
         self.tasks: dict[str, asyncio.Task] = {}
@@ -163,7 +163,12 @@ async def reply_task(chat: str) -> None:
             return
         msgs = build_messages(S.style, S.names.get(chat), list(S.history[chat]), SAFE_MODE,
                               SAFE_MODE and is_sensitive(texts), group=chat.endswith("@g.us"), n_new=len(batch))
-        reply = await llm.complete(msgs, accept=lambda t: not is_echo(t, texts) and not ABUSE.search(t))
+        def usable(t: str) -> bool:
+            parts = split_reply(t)
+            return bool(parts and parts[1]) and not is_echo(parts[1], texts) and not ABUSE.search(parts[1])
+
+        understanding, reply = split_reply(await llm.complete(msgs, accept=usable))
+        log.info("understood %s: %s", chat, understanding.replace("\n", " | "))
         out = enforce_style(clean_reply(reply), S.style.get("profile", {}), min_lines=len(batch))
         if not out:
             log.warning("Empty/unsafe LLM reply for %s, skipping", chat)
