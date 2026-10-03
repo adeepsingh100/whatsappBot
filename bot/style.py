@@ -192,7 +192,8 @@ HUMAN_RULES = """Sound like me texting from my phone, not like an assistant:
 
 
 def build_messages(style: dict, contact: str | None, history: list[tuple[bool, str]],
-                   safe_mode: bool = True, sensitive: bool = False, n_samples: int = 15) -> list[dict]:
+                   safe_mode: bool = True, sensitive: bool = False, n_samples: int = 15,
+                   group: bool = False) -> list[dict]:
     """OpenAI-style chat messages. history = [(from_me, text), ...] oldest first, last ~10."""
     prof = style.get("profile", {})
     pairs = style.get("pairs", [])
@@ -219,6 +220,9 @@ def build_messages(style: dict, contact: str | None, history: list[tuple[bool, s
         parts.append(SAFE_RULE)
         if sensitive:
             parts.append("This conversation touches one of those topics: stay vague, commit to nothing.")
+    if group:
+        parts.append("This is a GROUP chat: their lines start with 'Name: '. Someone just talked to me directly. "
+                     "Reply to that one person in one short line; don't address the whole group.")
     parts.append(f"You are chatting with {contact or 'a contact'}. Reply with only my next message text. "
                  "If I'd send several short messages, put each on its own line.")
     msgs = [{"role": "system", "content": "\n\n".join(parts)}]

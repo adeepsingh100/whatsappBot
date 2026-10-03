@@ -25,7 +25,7 @@ COPY start.sh .
 
 # Evolution Go defaults (secrets come from Render env vars)
 ENV SERVER_PORT=8080 CLIENT_NAME=evolution OS_NAME="Evolution GO" CONNECT_ON_STARTUP=true \
-    DATABASE_SAVE_MESSAGES=false EVENT_IGNORE_GROUP=true EVENT_IGNORE_STATUS=true WEBHOOK_FILES=false \
+    DATABASE_SAVE_MESSAGES=false EVENT_IGNORE_GROUP=false EVENT_IGNORE_STATUS=true WEBHOOK_FILES=false \
     MINIO_ENABLED=false AMQP_GLOBAL_ENABLED=false NATS_GLOBAL_ENABLED=false LOGTYPE=console WADEBUG=INFO \
     QRCODE_MAX_COUNT=10 TZ=Asia/Kolkata \
     PGSSLROOTCERT=/etc/ssl/certs/ca-certificates.crt PYTHONUNBUFFERED=1

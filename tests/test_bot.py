@@ -136,3 +136,33 @@ def test_ignore_cancels_scheduled_reply(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "BATCH_WAIT", 0.2)
     run(evt("hi", ts=now_ts(), mid="s1"), cmd("/ignore 9800000001", "s2"), wait=0.5)
     assert sent == [(ME, "🤖 ignoring: 9800000001")]                          # scheduled reply dropped
+
+
+GROUP = "120363000000000001@g.us"
+
+
+def gmsg(text, mid, sender=RAHUL, mentions=(), quoted="", from_me=False):
+    p = evt(text, chat=GROUP, sender=sender, group=True, ts=now_ts(), mid=mid, from_me=from_me)
+    p["data"]["Message"] = {"extendedTextMessage": {"text": text, "contextInfo": {
+        "mentionedJID": list(mentions), "participant": quoted}}}
+    return p
+
+
+def test_groups_reply_only_when_addressed(monkeypatch, tmp_path):
+    sent, prompts = setup(monkeypatch, tmp_path)
+    main.db.set("switch", "on")
+    main.S.me = {"919811111111", "55259384799419"}
+    run(gmsg("party kab hai sab log", "g1"))
+    assert sent == []                                                          # not talking to me
+    run(gmsg("@55259384799419 tu aa raha?", "g2", mentions=["55259384799419@lid"]))
+    assert sent == [(GROUP, "haan bhai")]                                      # @mentioned (by LID)
+    assert prompts[-1][-1]["content"].endswith("Rahul: tu aa raha?")         # who said it, mention stripped
+    assert "GROUP chat" in prompts[-1][0]["content"]
+    run(gmsg("sahi baat", "g3", quoted="919811111111@s.whatsapp.net"))
+    assert len(sent) == 2                                                      # replied to my message
+
+
+def test_learns_my_ids_from_my_messages(monkeypatch, tmp_path):
+    setup(monkeypatch, tmp_path)
+    run(gmsg("hello", "m1", sender="777000111:5@lid", from_me=True))
+    assert "777000111" in main.S.me and "777000111" in main.db.get("me_ids")

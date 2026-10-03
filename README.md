@@ -9,7 +9,7 @@ Auto-replies to your personal WhatsApp 1-to-1 chats in your own writing style.
 
 ## How it behaves
 
-- It replies only in 1-to-1 chats. It ignores groups, status, broadcast lists, channels and media-only messages.
+- It replies in 1-to-1 chats. In groups it replies only when someone @mentions you or replies to one of your messages. It ignores status, broadcast lists, channels and media-only messages.
 - It skips messages older than 30 minutes, so the backlog that arrives when Render wakes at 5:00 gets no reply.
 - If you type in a chat yourself, the bot stays quiet in that chat for 30 minutes.
 - If someone sends several messages, it waits about 8 seconds and answers them all at once. It waits 15–90 seconds (more for longer replies), marks the messages read, shows "typing…" and then sends.

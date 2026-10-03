@@ -40,6 +40,8 @@ class Incoming:
     text: str | None
     push_name: str
     sender_alt: str = ""
+    mentions: tuple[str, ...] = ()   # JIDs @mentioned in the message
+    quoted: str = ""                 # author JID of the message this one replies to
 
 
 def user(jid: str) -> str:
@@ -68,16 +70,33 @@ def parse_message(payload: dict) -> Incoming | None:
     info, msg = data.get("Info") or {}, data.get("Message") or {}
     if not info.get("ID") or not info.get("Chat"):
         return None
-    text = msg.get("conversation") or (msg.get("extendedTextMessage") or {}).get("text")
+    ext = msg.get("extendedTextMessage") or {}
+    text = msg.get("conversation") or ext.get("text")
+    ctx = ext.get("contextInfo") or {}
     return Incoming(id=info["ID"], chat=info["Chat"], sender=info.get("Sender", ""),
                     from_me=bool(info.get("IsFromMe")), is_group=bool(info.get("IsGroup")),
                     ts=_ts(info.get("Timestamp")), text=text.strip() if text else None,
-                    push_name=info.get("PushName") or "", sender_alt=info.get("SenderAlt") or "")
+                    push_name=info.get("PushName") or "", sender_alt=info.get("SenderAlt") or "",
+                    mentions=tuple(ctx.get("mentionedJID") or ctx.get("mentionedJid") or ()),
+                    quoted=ctx.get("participant") or "")
 
 
 def is_direct_chat(m: Incoming) -> bool:
     """1-to-1 chat with a person: not group, status, broadcast list or channel."""
     return not m.is_group and m.chat.endswith(("@s.whatsapp.net", "@lid"))
+
+
+def is_group_chat(m: Incoming) -> bool:
+    return m.chat.endswith("@g.us")
+
+
+def addressed_to_me(m: Incoming, me: set[str]) -> bool:
+    """Group message that @mentions me or replies to one of my messages."""
+    return any(user(j) in me for j in (*m.mentions, m.quoted) if j)
+
+
+def strip_mentions(text: str) -> str:
+    return re.sub(r"@\d{6,}\s*", "", text).strip()
 
 
 def is_self_chat(m: Incoming, my_number: str = "") -> bool:

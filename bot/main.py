@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -16,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from bot import llm
 from bot.db import DB
-from bot.rules import (BATCH_WAIT, BOT_SUSPECT, QUIET_FOR, is_echo, clean_reply, command, human_delay, is_direct_chat, is_ignored,
+from bot.rules import (BATCH_WAIT, BOT_SUSPECT, QUIET_FOR, addressed_to_me, is_echo, is_group_chat, strip_mentions, user, clean_reply, command, human_delay, is_direct_chat, is_ignored,
                        is_self_chat, phone_key,
                        is_sensitive, parse_message, too_old)
 from bot.style import build_messages, enforce_style
@@ -47,6 +48,7 @@ class State:
         self.tasks: dict[str, asyncio.Task] = {}
         self.sending: set[str] = set()            # chats past the point of no return
         self.qr: str | None = None
+        self.me: set[str] = set()                 # my JID users (phone number + LID), learned from my messages
         self.style: dict = {}
 
 
@@ -160,7 +162,7 @@ async def reply_task(chat: str) -> None:
             log.warning("%s asked about a bot: not replying to that message", chat)
             return
         msgs = build_messages(S.style, S.names.get(chat), list(S.history[chat]), SAFE_MODE,
-                              SAFE_MODE and is_sensitive(texts))
+                              SAFE_MODE and is_sensitive(texts), group=chat.endswith("@g.us"))
         reply = await llm.complete(msgs, accept=lambda t: not is_echo(t, texts))
         out = enforce_style(clean_reply(reply), S.style.get("profile", {}))
         if not out:
@@ -202,6 +204,14 @@ async def reply_task(chat: str) -> None:
             S.tasks[chat] = asyncio.create_task(reply_task(chat))
 
 
+async def learn_me(m) -> None:
+    """Remember my own JID users (phone + LID) so group @mentions of me are recognised."""
+    new = {user(j) for j in (m.sender, m.sender_alt) if j} - S.me
+    if new:
+        S.me |= new
+        await asyncio.to_thread(db.set, "me_ids", ",".join(sorted(S.me)))
+
+
 async def handle(payload: dict) -> None:
     event, now = payload.get("event"), time.time()
     if event == "QRCode":
@@ -211,6 +221,10 @@ async def handle(payload: dict) -> None:
     if event in ("Connected", "PairSuccess", "LoggedOut", "TemporaryBan", "ConnectFailure"):
         if event in ("Connected", "PairSuccess"):
             S.qr = None
+        if event == "PairSuccess":  # carries my phone JID and LID
+            data = payload.get("data") or {}
+            S.me |= {user(j) for j in (data.get("ID"), data.get("LID"), data.get("jid")) if j}
+            await asyncio.to_thread(db.set, "me_ids", ",".join(sorted(S.me)))
         log.warning("WhatsApp: %s %s", event, payload.get("data"))
         return
     m = parse_message(payload)
@@ -219,14 +233,18 @@ async def handle(payload: dict) -> None:
     _remember(S.seen, m.id, now)
     log.info("msg %s chat=%s sender=%s alt=%s from_me=%s text=%s", m.id, m.chat, m.sender, m.sender_alt,
              m.from_me, m.text is not None)
+    if m.from_me:
+        await learn_me(m)
     if is_self_chat(m, MY_NUMBER):
         if cmd := command(m.text):
             await run_command(*cmd, m.chat)
         return
-    if not is_direct_chat(m):
+    group = is_group_chat(m)
+    if not (is_direct_chat(m) or group):
         return
-    if m.text:
-        S.history[m.chat].append((m.from_me, m.text))
+    if m.text:  # in groups, keep who said what so the model sees the conversation
+        S.history[m.chat].append((m.from_me, strip_mentions(m.text) if m.from_me or not group
+                                  else f"{m.push_name or user(m.sender)}: {strip_mentions(m.text)}"))
     if m.from_me:  # I typed here myself: back off
         S.quiet[m.chat] = now + QUIET_FOR
         if (t := S.tasks.get(m.chat)) and not t.done() and m.chat not in S.sending:
@@ -234,6 +252,8 @@ async def handle(payload: dict) -> None:
         S.pending.pop(m.chat, None)
         return
     if not m.text or too_old(m, now) or S.quiet.get(m.chat, 0) > now:
+        return
+    if group and not addressed_to_me(m, S.me):  # in groups, only answer when someone talks to me
         return
     if not await asyncio.to_thread(db.is_on) or is_ignored(m, await asyncio.to_thread(ignored_numbers)):
         return
@@ -248,6 +268,7 @@ async def lifespan(app: FastAPI):
     global db
     db = DB()
     S.style = load_style()
+    S.me = set(filter(None, (db.get("me_ids") or "").split(","))) | ({phone} if (phone := re.sub(r"\D", "", MY_NUMBER)) else set())
     setup = asyncio.create_task(setup_instance()) if INSTANCE_TOKEN else None
     if not INSTANCE_TOKEN:
         log.warning("INSTANCE_TOKEN not set: not connecting to Evolution Go")
