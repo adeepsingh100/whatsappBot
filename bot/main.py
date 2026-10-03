@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from bot import llm
 from bot.db import DB
-from bot.rules import (BATCH_WAIT, BOT_SUSPECT, QUIET_FOR, aimed_at_someone_else, is_echo, is_group_chat, strip_mentions, user, with_context, clean_reply, command, human_delay, is_direct_chat, is_ignored,
+from bot.rules import (ABUSE, BATCH_WAIT, BOT_SUSPECT, QUIET_FOR, aimed_at_someone_else, is_echo, is_group_chat, strip_mentions, user, with_context, clean_reply, command, human_delay, is_direct_chat, is_ignored,
                        is_self_chat, phone_key,
                        is_sensitive, parse_message, too_old)
 from bot.style import build_messages, enforce_style
@@ -163,7 +163,7 @@ async def reply_task(chat: str) -> None:
             return
         msgs = build_messages(S.style, S.names.get(chat), list(S.history[chat]), SAFE_MODE,
                               SAFE_MODE and is_sensitive(texts), group=chat.endswith("@g.us"), n_new=len(batch))
-        reply = await llm.complete(msgs, accept=lambda t: not is_echo(t, texts))
+        reply = await llm.complete(msgs, accept=lambda t: not is_echo(t, texts) and not ABUSE.search(t))
         out = enforce_style(clean_reply(reply), S.style.get("profile", {}), min_lines=len(batch))
         if not out:
             log.warning("Empty/unsafe LLM reply for %s, skipping", chat)

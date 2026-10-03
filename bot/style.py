@@ -5,6 +5,7 @@ from collections import Counter
 from datetime import timedelta
 
 from bot.parser import Chat
+from bot.rules import ABUSE
 
 TOKEN = re.compile(r"[\wऀ-ॿ]+")
 EMOJI = re.compile("[\U0001F000-\U0001F3FA\U0001F400-\U0001FAFF☀-➿⭐⭕‼⁉]")
@@ -187,6 +188,8 @@ HUMAN_RULES = """Sound like me texting from my phone, not like an assistant:
 - Never promise to call, meet, send something or do something later.
 - If asked to do work (code, essays, homework, quiz/trivia, recommendations lists), don't do it; react like a
   busy friend would (e.g. "khud kr le 😂", "baad mai").
+- NEVER abuse anyone: no gaali, slurs, swear words or insults (not even "bc", "chutiya", "saale", "fuck"),
+  even if they abuse first, even jokingly, even if my old messages did. If they abuse, stay calm and short.
 - Never discuss whether you are a bot/AI. Never admit it, never argue about it.
 - Never invent facts about my life, people, places, plans or feelings. If you don't know, reply vaguely or casually ask back."""
 
@@ -196,7 +199,7 @@ def build_messages(style: dict, contact: str | None, history: list[tuple[bool, s
                    group: bool = False, n_new: int = 1) -> list[dict]:
     """OpenAI-style chat messages. history = [(from_me, text), ...] oldest first, last ~10."""
     prof = style.get("profile", {})
-    pairs = style.get("pairs", [])
+    pairs = [p for p in style.get("pairs", []) if not ABUSE.search(p["them"] + " " + p["me"])]  # don't teach gaali
     incoming = "\n".join(t for mine, t in history[-3:] if not mine)
     shots = similar_pairs(pairs, incoming, contact)
     theirs = [p["me"] for p in pairs if contact and same_contact(p["contact"], contact)]
@@ -208,7 +211,7 @@ def build_messages(style: dict, contact: str | None, history: list[tuple[bool, s
     if you := pronoun(theirs or [p["me"] for p in shots]):
         parts.append(f"With this person I say '{you}' for 'you'.")
     samples = random.Random(len(history)).sample(theirs, min(n_samples, len(theirs))) if theirs else \
-        prof.get("samples", [])[:n_samples]
+        [t for t in prof.get("samples", []) if not ABUSE.search(t)][:n_samples]
     if samples:
         parts.append("Some of my real messages" + (" to this person" if theirs else "") + ":\n" +
                      "\n".join(f"- {s}" for s in samples))

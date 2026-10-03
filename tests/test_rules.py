@@ -87,3 +87,14 @@ def test_echo():
     assert is_echo("Okay", ["Okay"]) and is_echo("Kab aai thi m?", ["Kab aai thi m"])
     assert not is_echo("Hii", ["Hii", "Kya kar rahe ho"]) and not is_echo("Good morning ji", ["Good morning"])
     assert not is_echo("Kaam krra hu", ["Kya kar rahe ho"])
+
+
+def test_no_abuse():
+    from bot.rules import ABUSE
+    for bad in ("bc kya hua", "Chutiye hai tu", "saale aaja", "what the fuck", "bsdk", "Bosdiwale", "tu kutta hai",
+                "behen chod", "gandu", "harami"):
+        assert ABUSE.search(bad), bad
+        assert clean_reply(bad) == []
+    for ok in ("kal chalega?", "Good morning", "sale chal rahi hai mall mai", "gandhi jayanti", "chutti hai kal",
+               "main road", "bhai mast"):
+        assert not ABUSE.search(ok), ok

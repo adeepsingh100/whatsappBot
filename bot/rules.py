@@ -22,6 +22,16 @@ SENSITIVE = re.compile(
 )
 AI_LEAK = re.compile(r"\b(as an ai|an ai|language model|chatbot|assistant|bot|robot|ai|gpt|chatgpt|"
                      r"automated|style copy|tumhari awaaz|tumhari awaz)\b", re.I)
+# Gaali / slurs / insults (Hinglish + English). Replies containing these are never sent, and my old messages
+# containing them are kept out of the prompt examples.
+ABUSE = re.compile(
+    r"\b(bc|mc|bkl|bsdk|bhosd\w*|bosd\w*|bhosad\w*|chut|chutiy\w*|chutya\w*|chutia\w*|madar\w*|maadar\w*|behen\s?ch\w*|bhen\s?ch\w*|"
+    r"benchod|bhenchod|behenchod|lund\w*|lawd\w*|laud\w*|lode|lodu|loda|gand|gaand\w*|gandu\w*|randi\w*|rand\b|"
+    r"harami\w*|haraam\w*|kutt[aeiy]\w*|kamin[ae]\w*|saal[ae]|suar|jhant\w*|tatt[ae]\w*|"
+    r"fuck\w*|f\*+k|wtf|stfu|shit\w*|bitch\w*|bastard\w*|asshole\w*|dick\w*|mf|motherf\w*|slut\w*|whore\w*|"
+    r"idiot\w*|stupid|moron\w*|retard\w*|pagal\s?k[ae]\s?bacch?[ae]|ullu\s?k[ae]\s?patth?[ae])\b",
+    re.I)
+
 # Someone asks/suspects a bot: don't answer that message (no admitting, no denying), keep chatting after.
 BOT_SUSPECT = re.compile(r"\b(bot|robot|ai|a\.i\.?|chat\s?gpt|gpt|automated|auto\s?reply|machine|fake)\b", re.I)
 # Asked to do assistant work (code, essays...): a busy friend wouldn't, so don't.
@@ -168,7 +178,7 @@ def clean_reply(text: str) -> list[str]:
     """LLM output -> list of WhatsApp messages to send. Empty list = don't send."""
     text = re.sub(r"^\s*(\[?me\]?|you)\s*:\s*", "", text.strip(), flags=re.I)
     text = text.strip().strip('"“”').strip()
-    if not text or AI_LEAK.search(text):
+    if not text or AI_LEAK.search(text) or ABUSE.search(text):
         return []
     if CODE.search(text):
         return []
