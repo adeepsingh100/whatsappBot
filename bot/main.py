@@ -270,7 +270,8 @@ async def handle(payload: dict) -> None:
         S.pending.pop(m.chat, None)
         return note(m.chat, "I typed here: quiet 30 min")
     if not m.text:
-        return note(m.chat, "skip: no text (media/sticker)")
+        kinds = ",".join(k for k in ((payload.get("data") or {}).get("Message") or {}) if k != "messageContextInfo")
+        return note(m.chat, f"skip: no text ({kinds or 'empty'})")
     if too_old(m, now):
         return note(m.chat, f"skip: too old ({int((now - m.ts) / 60)} min)")
     if S.quiet.get(m.chat, 0) > now:

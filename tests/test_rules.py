@@ -106,3 +106,13 @@ def test_split_reply():
     assert u.startswith("friend means my wife") and r == "dekhta hu\nbaad mai"
     assert split_reply("UNDERSTANDING: only thoughts, no reply") is None
     assert split_reply("haan bhai") == ("", "haan bhai")                     # model ignored the format: fine
+
+
+def test_wrapped_messages():
+    p = evt("x")
+    p["data"]["Message"] = {"ephemeralMessage": {"message": {"extendedTextMessage": {
+        "text": "group mai disappearing on hai", "contextInfo": {"participant": "91981@s.whatsapp.net"}}}}}
+    m = parse_message(p)
+    assert m.text == "group mai disappearing on hai" and m.quoted == "91981@s.whatsapp.net"
+    p["data"]["Message"] = {"editedMessage": {"message": {"conversation": "edited text"}}}
+    assert parse_message(p).text == "edited text"

@@ -81,6 +81,7 @@ def parse_message(payload: dict) -> Incoming | None:
     info, msg = data.get("Info") or {}, data.get("Message") or {}
     if not info.get("ID") or not info.get("Chat"):
         return None
+    msg = unwrap(msg)
     ext = msg.get("extendedTextMessage") or {}
     text = msg.get("conversation") or ext.get("text")
     ctx = ext.get("contextInfo") or {}
@@ -90,6 +91,20 @@ def parse_message(payload: dict) -> Incoming | None:
                     push_name=info.get("PushName") or "", sender_alt=info.get("SenderAlt") or "",
                     mentions=tuple(ctx.get("mentionedJID") or ctx.get("mentionedJid") or ()),
                     quoted=ctx.get("participant") or "", quoted_text=_quoted_text(ctx.get("quotedMessage")))
+
+
+WRAPPERS = ("ephemeralMessage", "viewOnceMessage", "viewOnceMessageV2", "viewOnceMessageV2Extension",
+            "documentWithCaptionMessage", "editedMessage", "deviceSentMessage", "botInvokeMessage")
+
+
+def unwrap(msg: dict) -> dict:
+    """Disappearing-message / view-once / edited wrappers keep the real message under .message."""
+    for _ in range(4):
+        inner = next((msg[k].get("message") for k in WRAPPERS if isinstance(msg.get(k), dict)), None)
+        if not inner:
+            return msg
+        msg = inner
+    return msg
 
 
 def _quoted_text(q: dict | None) -> str:
