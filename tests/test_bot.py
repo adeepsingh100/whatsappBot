@@ -190,5 +190,8 @@ def test_debug_log(monkeypatch, tmp_path):
     setup(monkeypatch, tmp_path)
     monkeypatch.setattr(main, "GLOBAL_API_KEY", "k")
     run(evt("hi", ts=now_ts() - 3600, mid="d1"))
-    d = TestClient(main.app).get("/debug", params={"key": "k"}).json()
+    c = TestClient(main.app)
+    d = c.get("/debug", params={"key": "k", "format": "json"}).json()
     assert any("skip: too old (60 min)" in r for r in d["recent"])
+    page = c.get("/debug", params={"key": "k"}).text
+    assert "Twin activity" in page and "skip: too old (60 min)" in page and "+919800000001" in page

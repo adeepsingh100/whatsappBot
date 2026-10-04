@@ -355,15 +355,70 @@ async def replies(key: str = ""):
     return HTMLResponse(REPLIES_PAGE % ("on" if on else "off", "ON" if on else "OFF", n, cards))
 
 
+DEBUG_PAGE = """<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="15"><title>Twin activity</title>
+<style>
+:root{--bg:#f0f2f5;--card:#fff;--fg:#111;--mute:#667;--ok:#0a7d32;--skip:#8a6d00;--err:#c0262d;--info:#2a5bd7;--line:#e4e6eb}
+@media(prefers-color-scheme:dark){:root{--bg:#111b21;--card:#202c33;--fg:#e9edef;--mute:#8696a0;--ok:#4cd17a;
+--skip:#e0b83c;--err:#ff6b6b;--info:#7aa5ff;--line:#2a3942}}
+body{font:14px/1.4 system-ui,sans-serif;margin:0;padding:16px;background:var(--bg);color:var(--fg)}
+h1{font-size:18px;margin:0 0 4px}.sub{color:var(--mute);margin-bottom:14px}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.stat{background:var(--card);border-radius:10px;padding:8px 12px;min-width:90px}
+.stat b{display:block;font-size:20px}.stat span{color:var(--mute);font-size:12px}
+.card{background:var(--card);border-radius:10px;padding:4px 0;margin-bottom:14px}
+.card h2{font-size:13px;color:var(--mute);margin:8px 14px;text-transform:uppercase;letter-spacing:.04em}
+.row{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;padding:7px 14px;border-top:1px solid var(--line)}
+.t{color:var(--mute);font-variant-numeric:tabular-nums}.who{font-weight:600}.what{overflow-wrap:anywhere}
+.ok{color:var(--ok)}.skip{color:var(--skip)}.err{color:var(--err)}.info{color:var(--info)}
+.legend{color:var(--mute);font-size:12px;margin-top:6px}
+</style><h1>🤖 Twin activity</h1><div class="sub">Bot is <b class="%s">%s</b> · up %s · refreshes every 15 s</div>
+<div class="stats">%s</div>%s<div class="card"><h2>Recent decisions (newest first)</h2>%s</div>
+<div class="legend"><span class="ok">green</span> replied · <span class="info">blue</span> waiting / connection ·
+<span class="skip">amber</span> skipped on purpose · <span class="err">red</span> error</div>"""
+
+
+def _who(chat: str) -> str:
+    if chat == "whatsapp":
+        return "WhatsApp"
+    name = S.names.get(chat)
+    kind = " (group)" if chat.endswith("@g.us") else ""
+    return (name or "+" + chat.split("@")[0] if chat.endswith("@s.whatsapp.net") else name or chat.split("@")[0]) + kind
+
+
+def _kind(what: str) -> str:
+    return ("ok" if what.startswith("replied") else "err" if what.startswith("error") else
+            "skip" if what.startswith(("skip", "I typed")) else "info")
+
+
 @app.get("/debug")
-async def debug(key: str = ""):
+async def debug(key: str = "", format: str = ""):
     if not GLOBAL_API_KEY or key != GLOBAL_API_KEY:
         return JSONResponse({"error": "forbidden"}, 403)
     now = time.time()
-    return {"up_minutes": int((now - S.started) / 60), "me": sorted(S.me),
-            "quiet": {c: int((t - now) / 60) for c, t in S.quiet.items() if t > now},
-            "pending": {c: len(v) for c, v in S.pending.items() if v}, "sending": sorted(S.sending),
-            "recent": [f"{t} {c} {w}" for t, c, w in reversed(S.log)]}
+    quiet = {c: int((t - now) / 60) for c, t in S.quiet.items() if t > now}
+    pending = {c: len(v) for c, v in S.pending.items() if v}
+    if format == "json":
+        return {"up_minutes": int((now - S.started) / 60), "me": sorted(S.me), "quiet": quiet, "pending": pending,
+                "sending": sorted(S.sending), "recent": [f"{t} {c} {w}" for t, c, w in reversed(S.log)]}
+    e = html.escape
+    up = int((now - S.started) / 60)
+    log_ = list(reversed(S.log))
+    on = await asyncio.to_thread(db.is_on)
+    stats = "".join(f'<div class="stat"><b>{v}</b><span>{k}</span></div>' for k, v in [
+        ("replied", sum(w.startswith("replied") for _, _, w in log_)),
+        ("skipped", sum(_kind(w) == "skip" for _, _, w in log_)),
+        ("errors", sum(w.startswith("error") for _, _, w in log_)),
+        ("waiting", sum(pending.values())), ("quiet chats", len(quiet))])
+    quiet_card = ('<div class="card"><h2>Quiet right now (you typed there)</h2>' + "".join(
+        f'<div class="row"><span class="t">{m} min</span><span class="who">{e(_who(c))}</span></div>'
+        for c, m in quiet.items()) + "</div>") if quiet else ""
+    rows = "".join(
+        f'<div class="row"><span class="t">{e(t.split()[-1][:5])}</span><span><span class="who">{e(_who(c))}</span> '
+        f'<span class="what {_kind(w)}">{e(w)}</span></span></div>' for t, c, w in log_) or \
+        '<div class="row"><span></span><span>Nothing yet since the last restart.</span></div>'
+    return HTMLResponse(DEBUG_PAGE % ("ok" if on else "err", "ON" if on else "OFF",
+                                      f"{up // 60} h {up % 60} min" if up >= 60 else f"{up} min", stats, quiet_card, rows))
 
 
 @app.get("/qr")
