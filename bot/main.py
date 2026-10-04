@@ -48,12 +48,18 @@ class State:
         self.tasks: dict[str, asyncio.Task] = {}
         self.sending: set[str] = set()            # chats past the point of no return
         self.qr: str | None = None
+        self.started = time.time()
+        self.log: deque = deque(maxlen=100)       # recent decisions for /debug: (time, chat, what)
         self.me: set[str] = set()                 # my JID users (phone number + LID), learned from my messages
         self.style: dict = {}
 
 
 S = State()
 db: DB | None = None
+
+
+def note(chat: str, what: str) -> None:
+    S.log.append((time.strftime("%d %H:%M:%S"), chat, what))
 
 
 def _remember(d: dict, key: str, now: float) -> None:
@@ -160,6 +166,7 @@ async def reply_task(chat: str) -> None:
         if any(BOT_SUSPECT.search(t) for t in texts):  # never argue about being a bot: skip just this batch
             S.pending.pop(chat, None)
             log.warning("%s asked about a bot: not replying to that message", chat)
+            note(chat, "skip: asked about a bot")
             return
         msgs = build_messages(S.style, S.names.get(chat), list(S.history[chat]), SAFE_MODE,
                               SAFE_MODE and is_sensitive(texts), group=chat.endswith("@g.us"), n_new=len(batch))
@@ -172,6 +179,7 @@ async def reply_task(chat: str) -> None:
         out = enforce_style(clean_reply(reply), S.style.get("profile", {}), min_lines=len(batch))
         if not out:
             log.warning("Empty/unsafe LLM reply for %s, skipping", chat)
+            note(chat, f"skip: model reply empty/unsafe ({reply[:60]!r})")
             S.pending.pop(chat, None)
             return
         delay = human_delay(" ".join(out))
@@ -187,6 +195,7 @@ async def reply_task(chat: str) -> None:
         if (S.quiet.get(chat, 0) > time.time() or not await asyncio.to_thread(db.is_on)
                 or is_ignored(batch[-1], await asyncio.to_thread(ignored_numbers))):  # re-check right before sending
             S.pending.pop(chat, None)
+            note(chat, "skip: quiet/off/ignored by send time")
             return
         S.sending.add(chat)
         S.pending.pop(chat, None)
@@ -197,11 +206,13 @@ async def reply_task(chat: str) -> None:
             S.history[chat].append((True, line))
         await asyncio.to_thread(db.log_reply, chat, "\n".join(texts), "\n".join(out), S.names.get(chat, ""))
         log.info("Replied to %s: %r", chat, out)
+        note(chat, f"replied: {' / '.join(out)[:80]}")
     except asyncio.CancelledError:
         cancelled = True
         raise
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         log.exception("Reply to %s failed", chat)
+        note(chat, f"error: {type(e).__name__}: {str(e)[:120]}")
         S.pending.pop(chat, None)
     finally:
         S.sending.discard(chat)
@@ -224,6 +235,7 @@ async def handle(payload: dict) -> None:
         log.info("New QR code: open /qr?key=GLOBAL_API_KEY")
         return
     if event in ("Connected", "PairSuccess", "LoggedOut", "TemporaryBan", "ConnectFailure"):
+        note("whatsapp", event)
         if event in ("Connected", "PairSuccess"):
             S.qr = None
         if event == "PairSuccess":  # carries my phone JID and LID
@@ -246,7 +258,7 @@ async def handle(payload: dict) -> None:
         return
     group = is_group_chat(m)
     if not (is_direct_chat(m) or group):
-        return
+        return note(m.chat, "skip: not a person/group chat")
     if m.text:  # in groups, keep who said what so the model sees the conversation
         line = with_context(m, S.me)
         S.history[m.chat].append((m.from_me, line if m.from_me or not group
@@ -256,16 +268,23 @@ async def handle(payload: dict) -> None:
         if (t := S.tasks.get(m.chat)) and not t.done() and m.chat not in S.sending:
             t.cancel()
         S.pending.pop(m.chat, None)
-        return
-    if not m.text or too_old(m, now) or S.quiet.get(m.chat, 0) > now:
-        return
+        return note(m.chat, "I typed here: quiet 30 min")
+    if not m.text:
+        return note(m.chat, "skip: no text (media/sticker)")
+    if too_old(m, now):
+        return note(m.chat, f"skip: too old ({int((now - m.ts) / 60)} min)")
+    if S.quiet.get(m.chat, 0) > now:
+        return note(m.chat, f"skip: quiet for {int((S.quiet[m.chat] - now) / 60)} more min")
     if group and aimed_at_someone_else(m, S.me):  # groups: answer everything except talk aimed at others
-        return
-    if not await asyncio.to_thread(db.is_on) or is_ignored(m, await asyncio.to_thread(ignored_numbers)):
-        return
+        return note(m.chat, "skip: aimed at someone else")
+    if not await asyncio.to_thread(db.is_on):
+        return note(m.chat, "skip: bot is off")
+    if is_ignored(m, await asyncio.to_thread(ignored_numbers)):
+        return note(m.chat, "skip: ignored")
     if m.push_name:
         S.names[m.chat] = m.push_name
     S.pending[m.chat].append(m)
+    note(m.chat, f"scheduled reply ({m.push_name or user(m.sender)}: {m.text[:40]!r})")
     schedule(m.chat)
 
 
@@ -333,6 +352,17 @@ async def replies(key: str = ""):
         f'<div class="b in">{e(incoming)}</div><div class="b out">{e(reply)}</div></div>'
         for ts, chat, name, incoming, reply in rows) or '<div class="card">No replies yet.</div>'
     return HTMLResponse(REPLIES_PAGE % ("on" if on else "off", "ON" if on else "OFF", n, cards))
+
+
+@app.get("/debug")
+async def debug(key: str = ""):
+    if not GLOBAL_API_KEY or key != GLOBAL_API_KEY:
+        return JSONResponse({"error": "forbidden"}, 403)
+    now = time.time()
+    return {"up_minutes": int((now - S.started) / 60), "me": sorted(S.me),
+            "quiet": {c: int((t - now) / 60) for c, t in S.quiet.items() if t > now},
+            "pending": {c: len(v) for c, v in S.pending.items() if v}, "sending": sorted(S.sending),
+            "recent": [f"{t} {c} {w}" for t, c, w in reversed(S.log)]}
 
 
 @app.get("/qr")

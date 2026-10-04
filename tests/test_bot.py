@@ -184,3 +184,11 @@ def test_swipe_reply_context_and_multi_answers(monkeypatch, tmp_path):
     assert '[replying to my message: "kal chalega?"] haan' in hist and "kitne baje?" in hist
     assert "2 messages in a row" in prompts[-1][0]["content"]
     assert sent == [(RAHUL, "haan pakka"), (RAHUL, "7 baje")]                 # 2 messages in -> up to 2 out
+
+
+def test_debug_log(monkeypatch, tmp_path):
+    setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(main, "GLOBAL_API_KEY", "k")
+    run(evt("hi", ts=now_ts() - 3600, mid="d1"))
+    d = TestClient(main.app).get("/debug", params={"key": "k"}).json()
+    assert any("skip: too old (60 min)" in r for r in d["recent"])
