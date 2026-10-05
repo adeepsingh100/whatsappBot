@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from bot import llm
 from bot.db import DB
-from bot.rules import (ABUSE, BATCH_WAIT, split_reply, BOT_SUSPECT, QUIET_FOR, aimed_at_someone_else, is_echo, is_group_chat, strip_mentions, user, with_context, clean_reply, command, human_delay, is_direct_chat, is_ignored,
+from bot.rules import (ABUSE, BATCH_WAIT, COMMIT, VAGUE, split_reply, BOT_SUSPECT, QUIET_FOR, aimed_at_someone_else, is_echo, is_group_chat, strip_mentions, user, with_context, clean_reply, command, human_delay, is_direct_chat, is_ignored,
                        is_self_chat, phone_key,
                        is_sensitive, parse_message, too_old)
 from bot.style import build_messages, enforce_style
@@ -177,6 +177,9 @@ async def reply_task(chat: str) -> None:
         understanding, reply = split_reply(await llm.complete(msgs, accept=usable))
         log.info("understood %s: %s", chat, understanding.replace("\n", " | "))
         out = enforce_style(clean_reply(reply), S.style.get("profile", {}), min_lines=len(batch))
+        if (chat.endswith("@g.us") or (SAFE_MODE and is_sensitive(texts))) and any(COMMIT.search(ln) for ln in out):
+            note(chat, f"no commitments: replaced {' / '.join(out)[:60]!r}")
+            out = enforce_style([random.choice(VAGUE)], S.style.get("profile", {}))
         if not out:
             log.warning("Empty/unsafe LLM reply for %s, skipping", chat)
             note(chat, f"skip: model reply empty/unsafe ({reply[:60]!r})")

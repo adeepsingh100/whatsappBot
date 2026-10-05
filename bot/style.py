@@ -239,7 +239,8 @@ def build_messages(style: dict, contact: str | None, history: list[tuple[bool, s
                      "one short line each, in order. Skip ones that need no answer.")
     if group:
         parts.append("This is a GROUP chat: their lines start with 'Name: '. Reply like I'd chip in to the group, "
-                     "in one short line; reply to the latest message(s).")
+                     "in one short line; reply to the latest message(s). In groups NEVER agree to or make plans, "
+                     "trips, meetups, bookings, money or any promise; if asked, stay vague (\"dekhta hu\").")
     parts.append(f"You are chatting with {contact or 'a contact'}. " + THINK_FIRST)
     msgs = [{"role": "system", "content": "\n\n".join(parts)}]
     for mine, text in history:

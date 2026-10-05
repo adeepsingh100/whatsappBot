@@ -32,6 +32,17 @@ ABUSE = re.compile(
     r"idiot\w*|stupid|moron\w*|retard\w*|pagal\s?k[ae]\s?bacch?[ae]|ullu\s?k[ae]\s?patth?[ae])\b",
     re.I)
 
+# Agreeing to plans / promising things. In groups (always) and sensitive chats, such replies are swapped for
+# a vague line: the model is told to stay vague but doesn't always listen.
+COMMIT = re.compile(
+    r"\b(pakka|done|deal|confirm\w*|book\w*|plan\w*|ticket\w*|bana lete|bna lete|kar lete|kr lete|kar le(n|t)ge|"
+    r"kar denge|kr denge|kar dunga|kr duga|kr dunga|de dunga|de duga|bhej dunga|bhej duga|bol denge|chalte h\w*|"
+    r"chalenge|chlenge|chalo|chlo|chal fir|chl fir|aa jaunga|aa jauga|aajaunga|aajauga|aaunga|auga|aa ?raha hu|"
+    r"aa ?rha hu|aara hu|aarha hu|milte h\w*|milenge|mil lete|i'?m in|count me in|i'?ll (come|join|be there|do|pay)|"
+    r"let'?s (go|do)|sure|bilkul|haan chal|ha chal|mai bhi aa\w*|main bhi aa\w*|me bhi aa\w*|promise|vaada|wada)\b",
+    re.I)
+VAGUE = ["Dekhta hu", "Baad mai btata hu", "Abhi pata ni", "Dekhte hai", "Btata hu"]
+
 # Someone asks/suspects a bot: don't answer that message (no admitting, no denying), keep chatting after.
 BOT_SUSPECT = re.compile(r"\b(bot|robot|ai|a\.i\.?|chat\s?gpt|gpt|automated|auto\s?reply|machine|fake)\b", re.I)
 # Asked to do assistant work (code, essays...): a busy friend wouldn't, so don't.

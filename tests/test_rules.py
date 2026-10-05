@@ -116,3 +116,12 @@ def test_wrapped_messages():
     assert m.text == "group mai disappearing on hai" and m.quoted == "91981@s.whatsapp.net"
     p["data"]["Message"] = {"editedMessage": {"message": {"conversation": "edited text"}}}
     assert parse_message(p).text == "edited text"
+
+
+def test_commitments():
+    from bot.rules import COMMIT
+    for bad in ("Haan pakka", "Chl fir yehi bol denge", "Hnji hnji plan bna lete hai🤣", "aa jaunga 7 baje",
+                "I'm in", "kal milte hai", "chalo done", "Bilkul sahi plan hai", "mai bhi aa rha hu"):
+        assert COMMIT.search(bad), bad
+    for ok in ("Kya hua", "Mast hai", "😂", "Kaam krra hu", "Good morning", "Nah maza ni aaya"):
+        assert not COMMIT.search(ok), ok

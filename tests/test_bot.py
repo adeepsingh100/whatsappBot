@@ -195,3 +195,10 @@ def test_debug_log(monkeypatch, tmp_path):
     assert any("skip: too old (60 min)" in r for r in d["recent"])
     page = c.get("/debug", params={"key": "k"}).text
     assert "Twin activity" in page and "skip: too old (60 min)" in page and "+919800000001" in page
+
+
+def test_group_never_commits(monkeypatch, tmp_path):
+    sent, _ = setup(monkeypatch, tmp_path, reply="Haan pakka chalte hai")
+    main.db.set("switch", "on")
+    run(gmsg("goa chaloge sab?", "c1"))
+    assert len(sent) == 1 and sent[0][1] in {"Dekhta hu", "Baad mai btata hu", "Abhi pata ni", "Dekhte hai", "Btata hu"}
